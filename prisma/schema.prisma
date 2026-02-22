@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// --- Core User & Auth ---
+
+model User {
+  id               String                @id @default(cuid())
+  email            String                @unique
+  name             String?
+  avatarUrl        String?
+  subscriptionTier String                @default("FREE")
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  memberships      OrganizationMember[]
+  transactions     StockTransaction[]
+  auditLogs        AuditLog[]
+  adjustmentsReq   InventoryAdjustment[] @relation("RequestedBy")
+  adjustmentsApp   InventoryAdjustment[] @relation("ApprovedBy")
+  notifications    EmailNotification[]
+}
+
+model Organization {
+  id           String               @id @default(cuid())
+  name         String
+  slug         String               @unique
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  members      OrganizationMember[]
+  categories   Category[]
+  products     Product[]
+  auditLogs    AuditLog[]
+  webhooks     WebhookConfig[]
+  notifications EmailNotification[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String       // e.g., "ADMIN", "VIEWER"
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+// --- Inventory ---
+
+model Category {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  products       Product[]
+
+  @@index([organizationId])
+}
+
+model Product {
+  id                String                @id @default(cuid())
+  organizationId    String
+  categoryId        String
+  name              String
+  costPrice         Decimal               @default(0)
+  sellingPrice      Decimal               @default(0)
+  sku               String                @unique
+  description       String?
+  quantity          Int                   @default(0)
+  lowStockThreshold Int                   @default(10)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  organization      Organization          @relation(fields: [organizationId], references: [id])
+  category          Category              @relation(fields: [categoryId], references: [id])
+  transactions      StockTransaction[]
+  alerts            LowStockAlert[]
+  adjustments       InventoryAdjustment[]
+  barcodes          Barcode[]
+
+  @@index([organizationId])
+  @@index([categoryId])
+}
+
+// --- Transactions & Audit ---
+
+model StockTransaction {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  type      String   // "IN", "OUT"
+  quantity  Int
+  notes     String?
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([userId])
+}
+
+model InventoryAdjustment {
+  id             String    @id @default(cuid())
+  productId      String
+  requestedById  String
+  approvedById   String?
+  quantityChange Int
+  reason         String
+  status         String    // "PENDING", "APPROVED", "REJECTED"
+  createdAt      DateTime  @default(now())
+  approvedAt     DateTime?
+  product        Product   @relation(fields: [productId], references: [id])
+  requestedBy    User      @relation("RequestedBy", fields: [requestedById], references: [id])
+  approvedBy     User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([productId])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  userName       String
+  action         String
+  entityType     String
+  entityId       String
+  changes        Json
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+}
+
+// --- Alerts & Integrations ---
+
+model LowStockAlert {
+  id          String    @id @default(cuid())
+  productId   String
+  triggeredAt DateTime  @default(now())
+  resolvedAt  DateTime?
+  notified    Boolean   @default(false)
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+model Barcode {
+  id        String   @id @default(cuid())
+  productId String
+  type      String   // "EAN", "UPC", "QR"
+  code      String   @unique
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+model WebhookConfig {
+  id             String       @id @default(cuid())
+  organizationId String
+  type           String
+  url            String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model EmailNotification {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  eventType      String
+  subject        String
+  body           String
+  sentAt         DateTime     @default(now())
+  status         String
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
