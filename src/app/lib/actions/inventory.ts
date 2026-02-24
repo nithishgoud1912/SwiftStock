@@ -1,33 +1,175 @@
 "use server";
 
+import { ratelimit } from "@/lib/ratelimit";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import { resend } from "@/app/lib/resend";
+import { getAuthorizedOrgId } from "@/lib/auth-helpers";
+import {
+  adjustStockSchema,
+  addProductSchema,
+  updateProductSchema,
+  entityIdSchema,
+  paginationSchema,
+} from "@/lib/validations";
+import crypto from "crypto";
 
-export async function getDashboardData(organizationId: string) {
-  // ... omitting unchanged code but wait, replace file content works by replacing exact target content
-  // so I'm doing two replacements ... I'll use multi_replace.
+// Helper to fire actual HTTP requests to registered webhooks
+async function dispatchWebhooks(organizationId: string, payload: any) {
+  try {
+    const webhooks = await prisma.webhookConfig.findMany({
+      where: { organizationId, isActive: true },
+    });
 
-  const products = await prisma.product.findMany({
-    where: { organizationId: organizationId },
-    orderBy: { updatedAt: "desc" },
-  });
+    for (const hook of webhooks) {
+      if (!hook.events.includes("*") && !hook.events.includes(payload.event))
+        continue;
 
-  const plainProducts = products.map((p) => ({
-    ...p,
-    costPrice: Number(p.costPrice),
-    sellingPrice: Number(p.sellingPrice),
-  }));
+      const body = JSON.stringify(payload);
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
 
-  const lowStockItems = plainProducts.filter(
-    (p) => p.quantity <= p.lowStockThreshold,
+      if (hook.secret) {
+        const signature = crypto
+          .createHmac("sha256", hook.secret)
+          .update(body)
+          .digest("hex");
+        headers["x-swiftstock-signature"] = signature;
+      }
+
+      fetch(hook.url, { method: "POST", headers, body }).catch((err) => {
+        console.error(`Failed to dispatch webhook to ${hook.url}:`, err);
+      });
+    }
+  } catch (err) {
+    console.error("Error dispatching webhooks:", err);
+  }
+}
+
+export async function getDashboardData() {
+  const organizationId = await getAuthorizedOrgId();
+
+  const getCachedData = unstable_cache(
+    async () => {
+      const products = await prisma.product.findMany({
+        where: { organizationId },
+        orderBy: { updatedAt: "desc" },
+        include: {
+          category: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      const plainProducts = products.map((p) => ({
+        ...p,
+        costPrice: Number(p.costPrice),
+        sellingPrice: Number(p.sellingPrice),
+      }));
+
+      const lowStockItems = plainProducts.filter(
+        (p) => p.quantity <= p.lowStockThreshold,
+      );
+
+      return {
+        products: plainProducts,
+        lowStockCount: lowStockItems.length,
+        totalItems: plainProducts.reduce((acc, p) => acc + p.quantity, 0),
+      };
+    },
+    [`dashboard-${organizationId}`],
+    {
+      tags: [`inventory-${organizationId}`],
+      revalidate: 3600, // Revalidate every hour regardless
+    },
   );
 
-  return {
-    products: plainProducts,
-    lowStockCount: lowStockItems.length,
-    totalItems: plainProducts.reduce((acc, p) => acc + p.quantity, 0),
-  };
+  return getCachedData();
+}
+
+/**
+ * Paginated inventory query for the InventoryTable.
+ * Supports cursor-based pagination with optional search, status, and category filters.
+ */
+export async function getInventoryProducts(params?: {
+  cursor?: string;
+  take?: number;
+  search?: string;
+  status?: "ALL" | "IN_STOCK" | "LOW_STOCK";
+  categoryId?: string;
+}) {
+  const organizationId = await getAuthorizedOrgId();
+  const take = params?.take ?? 25;
+  const cursor = params?.cursor;
+  const search = params?.search?.trim();
+  const status = params?.status ?? "ALL";
+  const categoryId =
+    params?.categoryId && params.categoryId !== "ALL"
+      ? params.categoryId
+      : undefined;
+
+  const getCachedProducts = unstable_cache(
+    async () => {
+      // Build dynamic where clause
+      const where: any = { organizationId };
+
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: "insensitive" } },
+          { sku: { contains: search, mode: "insensitive" } },
+        ];
+      }
+
+      if (categoryId) {
+        where.categoryId = categoryId;
+      }
+
+      const products = await prisma.product.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        take: take + 1,
+        cursor: cursor ? { id: cursor } : undefined,
+        include: {
+          category: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      // Apply status filter in-memory
+      let filtered = products.map((p) => ({
+        ...p,
+        costPrice: Number(p.costPrice),
+        sellingPrice: Number(p.sellingPrice),
+      }));
+
+      if (status === "LOW_STOCK") {
+        filtered = filtered.filter((p) => p.quantity <= p.lowStockThreshold);
+      } else if (status === "IN_STOCK") {
+        filtered = filtered.filter((p) => p.quantity > p.lowStockThreshold);
+      }
+
+      let nextCursor: string | undefined = undefined;
+      if (products.length > take) {
+        const nextItem = products.pop();
+        nextCursor = nextItem!.id;
+      }
+
+      return {
+        products: filtered.slice(0, take),
+        nextCursor,
+      };
+    },
+    [`inventory-query-${organizationId}`, JSON.stringify(params)],
+    {
+      tags: [`inventory-${organizationId}`],
+      revalidate: 3600,
+    },
+  );
+
+  return getCachedProducts();
 }
 
 export async function adjustStock(
@@ -35,11 +177,37 @@ export async function adjustStock(
   quantityChange: number,
   type: "IN" | "OUT",
 ) {
-  const { userId } = await auth();
+  const validated = adjustStockSchema.parse({
+    productId,
+    quantityChange,
+    type,
+  });
+  const { userId, orgRole, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
-  return prisma.$transaction(async (tx) => {
-    const product = await tx.product.update({
+  const requiresApproval = orgId ? orgRole !== "org:admin" : false;
+
+  if (requiresApproval) {
+    await prisma.inventoryAdjustment.create({
+      data: {
+        productId,
+        requestedById: userId,
+        quantityChange: type === "IN" ? quantityChange : -quantityChange,
+        reason: type === "IN" ? "Stock added" : "Stock removed",
+        status: "PENDING",
+      },
+    });
+
+    revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/approvals");
+    return {
+      status: "PENDING",
+      message: "Stock adjustment submitted for manager approval.",
+    };
+  }
+
+  const product = await prisma.$transaction(async (tx) => {
+    const updatedProduct = await tx.product.update({
       where: { id: productId },
       data: {
         quantity: {
@@ -48,6 +216,13 @@ export async function adjustStock(
         updatedAt: new Date(),
       },
     });
+
+    // Guard: Prevent negative stock — rolls back the entire transaction
+    if (updatedProduct.quantity < 0) {
+      throw new Error(
+        `Insufficient stock. Cannot remove ${quantityChange} units (only ${updatedProduct.quantity + quantityChange} available).`,
+      );
+    }
 
     await tx.stockTransaction.create({
       data: {
@@ -59,29 +234,118 @@ export async function adjustStock(
       },
     });
 
-    if (product.quantity <= product.lowStockThreshold) {
-      await tx.lowStockAlert.create({
-        data: {
-          productId: product.id,
-        },
+    // Smart Low Stock Alert handling
+    if (updatedProduct.quantity <= updatedProduct.lowStockThreshold) {
+      // Create alert only if there isn't an active one already
+      const activeAlert = await tx.lowStockAlert.findFirst({
+        where: { productId: updatedProduct.id, resolvedAt: null },
+      });
+      if (!activeAlert) {
+        await tx.lowStockAlert.create({
+          data: { productId: updatedProduct.id, notified: true },
+        });
+
+        // 🚨 MOCK EMAIL ALERT: Create an EmailNotification record
+        await tx.emailNotification.create({
+          data: {
+            userId: userId,
+            organizationId: updatedProduct.organizationId,
+            eventType: "LOW_STOCK_ALERT",
+            subject: `Action Required: Low Stock for ${updatedProduct.name}`,
+            body: `Warning: You are running out of ${updatedProduct.name} (SKU: ${updatedProduct.sku}). You only have ${updatedProduct.quantity} left in stock (Threshold: ${updatedProduct.lowStockThreshold}). Please reorder immediately to avoid stockouts.`,
+            status: "PENDING_DELIVERY", // Represents an email waiting to be dispatched by a cron worker or webhooks
+          },
+        });
+      }
+    } else {
+      // Resolve any active alerts since stock is back to normal
+      await tx.lowStockAlert.updateMany({
+        where: { productId: updatedProduct.id, resolvedAt: null },
+        data: { resolvedAt: new Date() },
       });
     }
 
-    revalidatePath("/dashboard");
-    revalidatePath("/inventory");
-
-    return product;
+    return updatedProduct;
   });
+
+  // Invalidate caches
+  revalidateTag(`inventory-${product.organizationId}`, "default");
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/approvals");
+
+  // DISPATCH Outside of Transaction to prevent connection pool exhaustion
+  if (product.quantity <= product.lowStockThreshold) {
+    const activeAlertCount = await prisma.lowStockAlert.count({
+      where: { productId: product.id, notified: true }, // Assuming 'notified' flag maps to the recent created alert in transaction, simple approximation since alert deduplication happens inside the tx
+    });
+
+    if (activeAlertCount > 0) {
+      // Simulating the email being sent for the logs
+      console.log(`\n================================`);
+      console.log(`📧 DISPATCHING REAL EMAIL VIA RESEND`);
+      console.log(`To Admin User ID: ${userId}`);
+      console.log(`Subject: Action Required: Low Stock for ${product.name}`);
+      console.log(`================================\n`);
+
+      const adminUser = await prisma.user.findUnique({ where: { id: userId } });
+
+      if (adminUser?.email) {
+        try {
+          await resend.emails.send({
+            from: "SwiftStock Alerts <onboarding@resend.dev>", // Resend's default testing email
+            to: adminUser.email,
+            subject: `Action Required: Low Stock for ${product.name}`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #d97706;">⚠️ Low Stock Alert</h2>
+                <p>Warning: You are running out of <strong>${product.name}</strong> (SKU: ${product.sku}).</p>
+                <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                  <p style="margin: 0;">You only have <span style="font-size: 1.25rem; font-weight: bold; color: #b45309;">${product.quantity}</span> left in stock.</p>
+                  <p style="margin: 4px 0 0 0; color: #78350f; font-size: 0.875rem;">(Threshold: ${product.lowStockThreshold})</p>
+                </div>
+                <p>Please log in to your SwiftStock dashboard and reorder immediately to avoid stockouts.</p>
+                <hr style="border: 1px solid #f3f4f6; margin: 24px 0;" />
+                <p style="color: #6b7280; font-size: 0.75rem;">Automated alert from your SwiftStock application.</p>
+              </div>
+            `,
+          });
+          console.log(`✅ Real Email sent successfully to ${adminUser.email}`);
+        } catch (error) {
+          console.error("❌ Failed to send real email via Resend:", error);
+        }
+      } else {
+        console.warn(
+          `⚠️ Could not send email: User ${userId} has no email address on file.`,
+        );
+      }
+
+      // 🚨 TRIGGER DEVELOPER WEBHOOKS
+      dispatchWebhooks(product.organizationId, {
+        event: "stock.low",
+        product: {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          quantity: product.quantity,
+          threshold: product.lowStockThreshold,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  revalidatePath("/dashboard", "layout");
+  return product;
 }
 
-export async function lowStockProducts(organizationId: string) {
-  return prisma.product.findMany({
-    where: {
-      organizationId,
-      quantity: { lte: 10 },
-    },
-    orderBy: { quantity: "asc" },
+export async function lowStockProducts() {
+  const organizationId = await getAuthorizedOrgId();
+  const products = await prisma.product.findMany({
+    where: { organizationId },
   });
+  return products
+    .filter((p) => p.quantity <= p.lowStockThreshold)
+    .sort((a, b) => a.quantity - b.quantity);
 }
 
 export async function createProduct({
@@ -96,6 +360,7 @@ export async function createProduct({
   lowStockThreshold = 10,
   userId, // We need this for the Audit Log
   userName, // Name of the user performing the action
+  imageUrl,
 }: {
   organizationId: string;
   categoryId: string;
@@ -108,6 +373,7 @@ export async function createProduct({
   lowStockThreshold?: number;
   userId: string;
   userName: string;
+  imageUrl?: string;
 }) {
   return prisma.$transaction(async (tx) => {
     // 1. Create the Product
@@ -122,6 +388,7 @@ export async function createProduct({
         sellingPrice,
         quantity: initialQuantity,
         lowStockThreshold,
+        imageUrl,
       },
     });
 
@@ -151,8 +418,7 @@ export async function createProduct({
       },
     });
 
-    revalidatePath("/dashboard");
-    revalidatePath("/inventory");
+    revalidatePath("/dashboard", "layout");
 
     return newProduct;
   });
@@ -161,19 +427,28 @@ export async function createProduct({
 export async function addProductAction(data: {
   name: string;
   sku: string;
+  categoryId: string;
   quantity: number;
   lowStockThreshold: number;
   costPrice: number;
   sellingPrice: number;
+  imageUrl?: string;
 }) {
-  const { userId, orgId } = await auth();
+  const validated = addProductSchema.parse(data);
+  const { userId, orgId, orgRole } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  const { success } = await ratelimit.limit(userId);
+
+  if (!success) {
+    throw new Error("Too many requests. Please try again later.");
+  }
 
   const activeOrgId = orgId || userId;
   const user = await currentUser();
-  const userName = user?.firstName
-    ? `${user.firstName} ${user.lastName || ""}`.trim()
-    : "Unknown User";
+  const fn = user?.firstName && user.firstName !== "null" ? user.firstName : "";
+  const ln = user?.lastName && user.lastName !== "null" ? user.lastName : "";
+  const userName = `${fn} ${ln}`.trim() || "Unknown User";
   const userEmail =
     user?.emailAddresses?.[0]?.emailAddress || "unknown@example.com";
 
@@ -199,29 +474,25 @@ export async function addProductAction(data: {
     },
   });
 
-  // Upsert a default category for the org
-  const category = await prisma.category.upsert({
-    where: { id: `default_cat_${activeOrgId}` },
-    update: {},
-    create: {
-      id: `default_cat_${activeOrgId}`,
-      name: "General",
-      organizationId: activeOrgId,
-    },
-  });
+  if (!data.categoryId)
+    return { success: false, error: "Please select a category." };
 
   try {
     const product = await createProduct({
       ...data,
       organizationId: activeOrgId,
-      categoryId: category.id,
+      categoryId: data.categoryId,
+      imageUrl: data.imageUrl,
       userId: userId,
       userName: userName,
       initialQuantity: data.quantity,
     });
+
+    revalidateTag(`inventory-${activeOrgId}`, "default");
+
     return { success: true, product };
   } catch (error: any) {
-    if (error.code === "P2002" && error.meta?.target?.includes("sku")) {
+    if (error.code === "P2002") {
       return {
         success: false,
         error: "A product with this SKU already exists.",
@@ -232,23 +503,428 @@ export async function addProductAction(data: {
   }
 }
 
-export async function getTransactions(organizationId: string) {
-  return prisma.stockTransaction.findMany({
+// Fetch unresolved low stock alerts for the notification bell
+export async function getLowStockAlerts() {
+  const organizationId = await getAuthorizedOrgId();
+  return prisma.lowStockAlert.findMany({
     where: {
+      resolvedAt: null,
       product: {
-        organizationId: organizationId,
+        organizationId,
       },
     },
     include: {
       product: {
-        select: { name: true, sku: true },
-      },
-      user: {
-        select: { name: true, email: true },
+        select: {
+          name: true,
+          sku: true,
+          quantity: true,
+          lowStockThreshold: true,
+        },
       },
     },
     orderBy: {
-      createdAt: "desc",
+      triggeredAt: "desc",
     },
   });
+}
+
+export async function updateProductAction(
+  productId: string,
+  data: {
+    name: string;
+    sku: string;
+    categoryId: string;
+    costPrice: number;
+    sellingPrice: number;
+    lowStockThreshold: number;
+    imageUrl?: string;
+  },
+) {
+  entityIdSchema.parse(productId);
+  const validated = updateProductSchema.parse(data);
+  const { userId, orgId, orgRole } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  if (orgId && orgRole !== "org:admin")
+    return { success: false, error: "Only Admins can edit products." };
+
+  const user = await currentUser();
+  const userName = user?.firstName
+    ? `${user.firstName} ${user.lastName || ""}`
+    : "Unknown";
+  const activeOrgId = orgId || userId;
+
+  try {
+    const updatedProduct = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: { id: productId },
+        data,
+      });
+      // Log the edit
+      await tx.auditLog.create({
+        data: {
+          organizationId: activeOrgId,
+          userId,
+          userName: userName,
+          action: "UPDATE",
+          entityType: "PRODUCT",
+          entityId: product.id,
+          changes: data,
+        },
+      });
+      return product;
+    });
+
+    return { success: true, product: updatedProduct };
+  } catch (error: any) {
+    if (error.code === "P2002") {
+      return {
+        success: false,
+        error: "A product with this SKU already exists.",
+      };
+    }
+    return { success: false, error: "An unexpected error occurred." };
+  }
+}
+
+export async function deleteProductAction(productId: string) {
+  entityIdSchema.parse(productId);
+  const { userId, orgId, orgRole } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  if (orgId && orgRole !== "org:admin")
+    return { success: false, error: "Only Admins can delete products." };
+  const user = await currentUser();
+  const userName = user?.firstName
+    ? `${user.firstName} ${user.lastName || ""}`
+    : "Unknown";
+  const activeOrgId = orgId || userId;
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Just delete the actual product! Prisma's Cascade Delete handles the rest automatically!
+    const deletedProduct = await tx.product.delete({
+      where: { id: productId },
+    });
+    // 2. Log the deletion
+    await tx.auditLog.create({
+      data: {
+        organizationId: activeOrgId,
+        userId,
+        userName: userName,
+        action: "DELETE",
+        entityType: "PRODUCT",
+        entityId: productId,
+        changes: { name: deletedProduct.name, sku: deletedProduct.sku },
+      },
+    });
+    return { success: true };
+  });
+
+  revalidateTag(`inventory-${activeOrgId}`, "default");
+  revalidatePath("/dashboard", "layout");
+
+  return result;
+}
+
+export async function bulkDeleteProductsAction(productIds: string[]) {
+  const { userId, orgId, orgRole } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  if (orgId && orgRole !== "org:admin")
+    return { success: false, error: "Only Admins can delete products." };
+
+  const activeOrgId = orgId || userId;
+  const user = await currentUser();
+  const userName = user?.firstName
+    ? `${user.firstName} ${user.lastName || ""}`
+    : "Unknown";
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Fetch the products first so we can log their names/SKUs
+      const productsToDelete = await tx.product.findMany({
+        where: { id: { in: productIds }, organizationId: activeOrgId },
+      });
+
+      if (productsToDelete.length === 0) {
+        throw new Error("No matching products found to delete.");
+      }
+
+      // 2. Delete them (Cascade Delete handles related records)
+      await tx.product.deleteMany({
+        where: { id: { in: productIds }, organizationId: activeOrgId },
+      });
+
+      // 3. Log the bulk deletion
+      await tx.auditLog.create({
+        data: {
+          organizationId: activeOrgId,
+          userId,
+          userName,
+          action: "DELETE",
+          entityType: "PRODUCT",
+          entityId: "BULK",
+          changes: {
+            count: productsToDelete.length,
+            deletedItems: productsToDelete.map((p) => ({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+            })),
+          },
+        },
+      });
+
+      return { success: true, count: productsToDelete.length };
+    });
+
+    revalidateTag(`inventory-${activeOrgId}`, "default");
+    revalidatePath("/dashboard", "layout");
+
+    return result;
+  } catch (error: any) {
+    console.error("Bulk Delete Error:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to delete products.",
+    };
+  }
+}
+
+export async function getStockTransactions(
+  cursor?: string,
+  take: number = 20,
+  search?: string,
+  type?: "ALL" | "IN" | "OUT",
+) {
+  const validated = paginationSchema.parse({ cursor, take });
+  const organizationId = await getAuthorizedOrgId();
+
+  const where: any = {
+    product: {
+      organizationId,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { sku: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+  };
+
+  if (type && type !== "ALL") {
+    where.type = type;
+  }
+  const transactions = await prisma.stockTransaction.findMany({
+    where,
+    include: {
+      product: {
+        select: {
+          name: true,
+          sku: true,
+          category: {
+            select: { name: true },
+          },
+        },
+      },
+      user: { select: { name: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: take + 1, // Fetch one extra to determine if there is a next page
+    cursor: cursor ? { id: cursor } : undefined,
+  });
+
+  let nextCursor: typeof cursor | undefined = undefined;
+  if (transactions.length > take) {
+    const nextItem = transactions.pop(); // Remove the extra item
+    nextCursor = nextItem!.id;
+  }
+
+  return {
+    transactions,
+    nextCursor,
+  };
+}
+
+export async function getRecentActivity() {
+  const organizationId = await getAuthorizedOrgId();
+
+  const transactions = await prisma.stockTransaction.findMany({
+    where: {
+      product: {
+        organizationId,
+      },
+    },
+    include: {
+      product: { select: { name: true, sku: true } },
+      user: { select: { name: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  return transactions;
+}
+
+// --- Manager Approval Workflows ---
+
+export async function getPendingAdjustments() {
+  const organizationId = await getAuthorizedOrgId();
+
+  return prisma.inventoryAdjustment.findMany({
+    where: {
+      product: { organizationId },
+      status: "PENDING",
+    },
+    include: {
+      product: { select: { name: true, sku: true, quantity: true } },
+      requestedBy: { select: { name: true, email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function approveAdjustment(adjustmentId: string) {
+  entityIdSchema.parse(adjustmentId);
+  const { userId, orgRole, orgId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  if (orgId && orgRole !== "org:admin")
+    throw new Error("Unauthorized. Only admins can approve.");
+
+  const product = await prisma.$transaction(async (tx) => {
+    const adjustment = await tx.inventoryAdjustment.update({
+      where: { id: adjustmentId },
+      data: {
+        status: "APPROVED",
+        approvedById: userId,
+        approvedAt: new Date(),
+      },
+    });
+
+    const updatedProduct = await tx.product.update({
+      where: { id: adjustment.productId },
+      data: {
+        quantity: { increment: adjustment.quantityChange },
+        updatedAt: new Date(),
+      },
+    });
+
+    await tx.stockTransaction.create({
+      data: {
+        productId: updatedProduct.id,
+        userId: adjustment.requestedById, // Log the original requester
+        quantity: Math.abs(adjustment.quantityChange),
+        type: adjustment.quantityChange > 0 ? "IN" : "OUT",
+        notes: `Approved By Admin. Reason: ${adjustment.reason}`,
+      },
+    });
+
+    // Check low stock alert after approval
+    if (updatedProduct.quantity <= updatedProduct.lowStockThreshold) {
+      const activeAlert = await tx.lowStockAlert.findFirst({
+        where: { productId: updatedProduct.id, resolvedAt: null },
+      });
+      if (!activeAlert) {
+        await tx.lowStockAlert.create({
+          data: { productId: updatedProduct.id, notified: true },
+        });
+      }
+    } else {
+      await tx.lowStockAlert.updateMany({
+        where: { productId: updatedProduct.id, resolvedAt: null },
+        data: { resolvedAt: new Date() },
+      });
+    }
+
+    return updatedProduct;
+  });
+
+  if (product.quantity <= product.lowStockThreshold) {
+    const activeAlertCount = await prisma.lowStockAlert.count({
+      where: { productId: product.id, notified: true },
+    });
+
+    if (activeAlertCount > 0) {
+      // 🚨 TRIGGER DEVELOPER WEBHOOKS
+      dispatchWebhooks(product.organizationId, {
+        event: "stock.low",
+        product: {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          quantity: product.quantity,
+          threshold: product.lowStockThreshold,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  revalidatePath("/dashboard", "layout");
+  revalidatePath("/dashboard/approvals");
+  return { success: true };
+}
+
+export async function rejectAdjustment(adjustmentId: string) {
+  entityIdSchema.parse(adjustmentId);
+  const { userId, orgRole, orgId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  if (orgId && orgRole !== "org:admin")
+    throw new Error("Unauthorized. Only admins can reject.");
+
+  await prisma.inventoryAdjustment.update({
+    where: { id: adjustmentId },
+    data: {
+      status: "REJECTED",
+      approvedById: userId,
+      approvedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/dashboard/approvals");
+  return { success: true };
+}
+
+export async function getAnalyticsData() {
+  const organizationId = await getAuthorizedOrgId();
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const transactions = await prisma.stockTransaction.findMany({
+    where: {
+      product: { organizationId },
+      createdAt: { gte: thirtyDaysAgo },
+    },
+    select: {
+      type: true,
+      quantity: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Group by date (YYYY-MM-DD)
+  const groupedData = transactions.reduce((acc: any, tx: any) => {
+    const dateStr = tx.createdAt.toISOString().split("T")[0];
+    if (!acc[dateStr]) {
+      acc[dateStr] = { date: dateStr, added: 0, removed: 0 };
+    }
+
+    if (tx.type === "IN") {
+      acc[dateStr].added += tx.quantity;
+    } else {
+      acc[dateStr].removed += tx.quantity;
+    }
+
+    return acc;
+  }, {});
+
+  // Convert to array and format dates for the chart
+  return Object.values(groupedData).map((item: any) => ({
+    ...item,
+    // Format "2024-03-15" -> "Mar 15"
+    date: new Date(item.date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+  }));
 }

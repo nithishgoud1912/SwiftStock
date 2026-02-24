@@ -1,7 +1,12 @@
-import { getTransactions } from "@/app/lib/actions/inventory";
-import TransactionTable from "@/components/dashboard/TransactionTable";
+import type { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import TransactionsClient from "@/components/dashboard/TransactionsClient";
+
+export const metadata: Metadata = {
+  title: "Transactions | SwiftStock",
+  description: "View and manage stock movement history and CSV imports.",
+};
 
 export default async function TransactionsPage() {
   const { userId, orgId } = await auth();
@@ -9,11 +14,6 @@ export default async function TransactionsPage() {
   if (!userId) {
     redirect("/sign-in");
   }
-
-  const activeOrgId = orgId || userId;
-
-  // Fetch all transactions for this organization
-  const transactions = await getTransactions(activeOrgId);
 
   return (
     <div className="p-6 space-y-6">
@@ -26,16 +26,7 @@ export default async function TransactionsPage() {
         </p>
       </header>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Recent Activity
-          </h2>
-        </div>
-        <div className="p-6">
-          <TransactionTable transactions={transactions} />
-        </div>
-      </div>
+      <TransactionsClient />
     </div>
   );
 }

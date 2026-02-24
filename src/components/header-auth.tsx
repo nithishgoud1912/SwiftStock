@@ -6,7 +6,9 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
+  useAuth,
 } from "@clerk/nextjs";
+import NotificationBell from "./dashboard/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 import { dark } from "@clerk/themes";
@@ -17,6 +19,9 @@ import SideMenu from "./side-menu";
 
 export function HeaderAuth() {
   const { resolvedTheme } = useTheme();
+  const { orgId, userId } = useAuth();
+  const activeOrgId = orgId || userId;
+
   // Avoid hydration mismatch by only rendering after mount
   const [mounted, setMounted] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -61,7 +66,7 @@ export function HeaderAuth() {
                 <div className="h-8 w-8 rounded-lg bg-[#6c47ff] flex items-center justify-center text-white">
                   S
                 </div>
-                <span className="text-xl hidden sm:inline-block">
+                <span className="text-xl font-bold tracking-tight">
                   Swift<span className="text-[#6c47ff]">Stock</span>
                 </span>
               </div>
@@ -99,11 +104,11 @@ export function HeaderAuth() {
 
             <SignedIn>
               <div className="flex items-center gap-4">
-                <nav className="hidden md:flex gap-4 text-sm font-medium text-muted-foreground">
+                <nav className="flex gap-4 text-sm font-medium text-muted-foreground items-center">
                   <a href="/dashboard" className="hover:text-primary">
                     Dashboard
                   </a>
-                  <a href="/inventory" className="hover:text-primary">
+                  <a href="/dashboard/inventory" className="hover:text-primary">
                     Inventory
                   </a>
                   <a
@@ -112,8 +117,17 @@ export function HeaderAuth() {
                   >
                     Transactions
                   </a>
+                  <a
+                    href="/dashboard/settings/organization"
+                    className="hover:text-primary"
+                  >
+                    Settings
+                  </a>
                 </nav>
-                <UserButton appearance={clerkAppearance} />
+                <div className="flex items-center gap-4">
+                  {activeOrgId && <NotificationBell />}
+                  <UserButton appearance={clerkAppearance} />
+                </div>
               </div>
             </SignedIn>
           </div>

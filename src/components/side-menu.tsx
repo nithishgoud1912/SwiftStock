@@ -33,9 +33,10 @@ const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
 
       {/* Sidebar Panel */}
       <div
-        className={`fixed top-0 left-0 z-70 h-full w-64 md:w-80 bg-background border-r border-border/40 shadow-xl transform transition-transform duration-300 ease-in-out ${
-          isMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-0 left-0 z-70 h-full w-64 md:w-80 bg-background border-r border-border/40 shadow-xl transition-transform duration-300 ease-in-out`}
+        style={{
+          transform: isMenuOpen ? "translateX(0)" : "translateX(-100%)",
+        }}
       >
         <div className="flex flex-col h-full">
           {/* Sidebar Header */}
@@ -76,7 +77,7 @@ const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
                   Dashboard
                 </Link>
                 <Link
-                  href="/inventory"
+                  href="/dashboard/inventory"
                   onClick={() => setIsMenuOpen(false)}
                   className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
                 >
@@ -88,6 +89,13 @@ const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
                   className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
                 >
                   Transaction Ledger
+                </Link>
+                <Link
+                  href="/dashboard/approvals"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors border-t border-border/40 mt-1 pt-3"
+                >
+                  Approvals
                 </Link>
               </nav>
             </SignedIn>

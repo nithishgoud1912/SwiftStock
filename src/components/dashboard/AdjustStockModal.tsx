@@ -4,12 +4,9 @@ import { useState } from "react";
 import { useInventoryStore } from "@/app/lib/store/useInventoryStore";
 import { adjustStock } from "@/app/lib/actions/inventory";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 
-export default function AdjustStockModal({
-  activeOrgId,
-}: {
-  activeOrgId: string;
-}) {
+export default function AdjustStockModal() {
   const {
     isAdjustModalOpen,
     selectedProductId,
@@ -25,14 +22,11 @@ export default function AdjustStockModal({
       return adjustStock(selectedProductId!, Number(amount), transactionType);
     },
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ["inventory", activeOrgId] });
-      const previousInventory = queryClient.getQueryData([
-        "inventory",
-        activeOrgId,
-      ]);
+      await queryClient.cancelQueries({ queryKey: ["inventory"] });
+      const previousInventory = queryClient.getQueryData(["inventory"]);
 
       // Optimistically update
-      queryClient.setQueryData(["inventory", activeOrgId], (old: any) => {
+      queryClient.setQueryData(["inventory"], (old: any) => {
         // Find the product and update its quantity instantly
         if (!old) return old;
         return {
@@ -56,14 +50,12 @@ export default function AdjustStockModal({
     },
     onError: (err, variables, context) => {
       if (context?.previousInventory) {
-        queryClient.setQueryData(
-          ["inventory", activeOrgId],
-          context.previousInventory,
-        );
+        queryClient.setQueryData(["inventory"], context.previousInventory);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["inventory", activeOrgId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
     },
   });
 
@@ -77,7 +69,10 @@ export default function AdjustStockModal({
     if (!amount || amount <= 0) return;
 
     mutation.mutate(undefined, {
-      onSuccess: () => {
+      onSuccess: (data: any) => {
+        if (data && data.status === "PENDING") {
+          toast.success("Stock adjustment sent to an Admin for approval.");
+        }
         closeAdjustModal();
         setAmount("");
       },
@@ -85,7 +80,7 @@ export default function AdjustStockModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
         <h2 className="mb-4 text-xl font-bold dark:text-white">
           {isAdding ? "Add Stock (IN)" : "Remove Stock (OUT)"}

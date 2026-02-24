@@ -6,17 +6,23 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
 // --- Core User & Auth ---
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
 
 model User {
   id               String                @id @default(cuid())
   email            String                @unique
   name             String?
   avatarUrl        String?
-  subscriptionTier String                @default("FREE")
+  subscriptionTier SubscriptionTier      @default(FREE)
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
   memberships      OrganizationMember[]
@@ -28,16 +34,17 @@ model User {
 }
 
 model Organization {
-  id           String               @id @default(cuid())
-  name         String
-  slug         String               @unique
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  members      OrganizationMember[]
-  categories   Category[]
-  products     Product[]
-  auditLogs    AuditLog[]
-  webhooks     WebhookConfig[]
+  id            String               @id @default(cuid())
+  name          String
+  slug          String               @unique
+  currency      String               @default("INR")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  members       OrganizationMember[]
+  categories    Category[]
+  products      Product[]
+  auditLogs     AuditLog[]
+  webhooks      WebhookConfig[]
   notifications EmailNotification[]
 }
 
@@ -45,7 +52,7 @@ model OrganizationMember {
   id             String       @id @default(cuid())
   userId         String
   organizationId String
-  role           String       // e.g., "ADMIN", "VIEWER"
+  role           String // e.g., "ADMIN", "VIEWER"
   createdAt      DateTime     @default(now())
   user           User         @relation(fields: [userId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -73,6 +80,7 @@ model Product {
   organizationId    String
   categoryId        String
   name              String
+  imageUrl          String?
   costPrice         Decimal               @default(0)
   sellingPrice      Decimal               @default(0)
   sku               String                @unique
@@ -98,11 +106,11 @@ model StockTransaction {
   id        String   @id @default(cuid())
   productId String
   userId    String
-  type      String   // "IN", "OUT"
+  type      String // "IN", "OUT"
   quantity  Int
   notes     String?
   createdAt DateTime @default(now())
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
 
   @@index([productId])
@@ -116,10 +124,10 @@ model InventoryAdjustment {
   approvedById   String?
   quantityChange Int
   reason         String
-  status         String    // "PENDING", "APPROVED", "REJECTED"
+  status         String // "PENDING", "APPROVED", "REJECTED"
   createdAt      DateTime  @default(now())
   approvedAt     DateTime?
-  product        Product   @relation(fields: [productId], references: [id])
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   requestedBy    User      @relation("RequestedBy", fields: [requestedById], references: [id])
   approvedBy     User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
 
@@ -150,7 +158,7 @@ model LowStockAlert {
   triggeredAt DateTime  @default(now())
   resolvedAt  DateTime?
   notified    Boolean   @default(false)
-  product     Product   @relation(fields: [productId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
@@ -158,23 +166,26 @@ model LowStockAlert {
 model Barcode {
   id        String   @id @default(cuid())
   productId String
-  type      String   // "EAN", "UPC", "QR"
+  type      String // "EAN", "UPC", "QR"
   code      String   @unique
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
 
 model WebhookConfig {
-  id             String       @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  type           String
   url            String
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  secret         String?
+  events         String[] @default(["*"])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model EmailNotification {
