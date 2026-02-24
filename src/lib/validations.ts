@@ -24,6 +24,7 @@ export const addProductSchema = z.object({
     .max(255, "Product name too long"),
   sku: z.string().min(1, "SKU is required").max(100, "SKU too long"),
   categoryId: z.string().min(1, "Category is required"),
+  description: z.string().max(500, "Description too long").optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   quantity: z
     .number()
@@ -46,6 +47,7 @@ export const updateProductSchema = z.object({
     .max(255, "Product name too long"),
   sku: z.string().min(1, "SKU is required").max(100, "SKU too long"),
   categoryId: z.string().min(1, "Category is required"),
+  description: z.string().max(500, "Description too long").optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   costPrice: z.number().min(0, "Cost price cannot be negative"),
   sellingPrice: z.number().min(0, "Selling price cannot be negative"),

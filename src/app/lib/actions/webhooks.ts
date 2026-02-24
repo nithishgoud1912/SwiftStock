@@ -59,7 +59,6 @@ export async function createWebhook(data: { url: string; secret?: string }) {
     revalidatePath("/dashboard/settings/webhooks");
     return { success: true, webhook };
   } catch (error) {
-    console.error("Failed to create webhook:", error);
     return { success: false, error: "Failed to create webhook." };
   }
 }

@@ -8,7 +8,7 @@ try {
   const { Resend } = require("resend");
   resend = new Resend(process.env.RESEND_API_KEY || "dummy_key");
 } catch (e) {
-  console.warn("Resend is not installed or configured.");
+  // Resend optional
 }
 
 export async function GET(request: Request) {
@@ -68,8 +68,6 @@ export async function GET(request: Request) {
         emailsSent.push(orgId);
       } else {
         // Mock sending for development/demonstration
-        console.log(`[MOCK EMAIL SENT TO ORG ${orgId}]`);
-        console.log(emailHtml);
         emailsSent.push(orgId);
       }
     }
@@ -80,7 +78,6 @@ export async function GET(request: Request) {
       message: `Digest sent for ${emailsSent.length} organizations.`,
     });
   } catch (error: any) {
-    console.error("Cron Digest Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error.message },
       { status: 500 },

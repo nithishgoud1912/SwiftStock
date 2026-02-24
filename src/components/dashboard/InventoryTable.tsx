@@ -181,7 +181,6 @@ export default function InventoryTable({
         toast.error(`Failed to import: ${result.error}`);
       }
     } catch (err) {
-      console.error(err);
       toast.error("An unexpected error occurred reading the file.");
     } finally {
       setIsImporting(false);
@@ -192,7 +191,7 @@ export default function InventoryTable({
 
   return (
     <>
-      <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="mb-4 flex flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex flex-1 items-center gap-2 w-full sm:w-auto">
           <div className="relative flex-1 max-w-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -206,12 +205,12 @@ export default function InventoryTable({
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm transition-colors"
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-40">
+          <div className="flex gap-2 w-full sm:w-auto ">
+            <div className="relative flex-1 sm:w-40 ">
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors appearance-none"
+                className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors appearance-none"
               >
                 <option value="ALL">All Categories</option>
                 {(categories || []).map((cat: any) => (
@@ -229,7 +228,7 @@ export default function InventoryTable({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors appearance-none"
+                className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white transition-colors appearance-none"
               >
                 <option value="ALL">All Status</option>
                 <option value="IN_STOCK">In Stock</option>

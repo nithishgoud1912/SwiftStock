@@ -7,6 +7,7 @@ import {
 } from "@/app/lib/actions/inventory";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Product } from "@/types/inventory";
+import { X } from "lucide-react";
 
 export default function DeleteProductModal() {
   const {
@@ -40,11 +41,23 @@ export default function DeleteProductModal() {
   if (!isDeleteProductModalOpen || productsToDelete.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
-        <h2 className="mb-2 text-xl font-bold text-red-600 dark:text-red-500">
-          Delete {isBulk ? `${productsToDelete.length} Products` : "Product"}?
-        </h2>
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        onClick={closeDeleteProductModal}
+      />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
+        <div className="flex justify-between items-start mb-2">
+          <h2 className="text-xl font-bold text-red-600 dark:text-red-500">
+            Delete {isBulk ? `${productsToDelete.length} Products` : "Product"}?
+          </h2>
+          <button
+            onClick={closeDeleteProductModal}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
         <p className="mb-6 text-gray-600 dark:text-gray-400">
           Are you sure you want to delete{" "}
           <span className="font-bold text-gray-900 dark:text-white">
@@ -78,6 +91,6 @@ export default function DeleteProductModal() {
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

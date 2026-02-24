@@ -17,43 +17,6 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 font-sans selection:bg-[#6c47ff]/30 selection:text-[#6c47ff]">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 border-b border-gray-200 dark:border-white/10 bg-white/80 dark:bg-black/50 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-[#6c47ff] to-[#4b2ecc] flex items-center justify-center">
-              <Box className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl tracking-tight">SwiftStock</span>
-          </div>
-          <div className="flex items-center gap-4">
-            {userId ? (
-              <Link
-                href="/dashboard"
-                className="text-sm font-medium hover:text-[#6c47ff] transition-colors"
-              >
-                Go to Dashboard
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/sign-in"
-                  className="text-sm font-medium hover:text-[#6c47ff] transition-colors"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className="text-sm font-medium bg-[#6c47ff] hover:bg-[#5a38e8] text-white px-4 py-2 rounded-full transition-all shadow-lg shadow-[#6c47ff]/20 hover:shadow-[#6c47ff]/40"
-                >
-                  Get Started
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
-
       <main className="pt-24 pb-16">
         {/* Hero Section */}
         <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-32 text-center">

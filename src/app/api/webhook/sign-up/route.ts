@@ -31,9 +31,7 @@ export async function POST(req: Request) {
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     }) as WebhookEvent;
-    console.log("Webhook verified successfully:", evt);
   } catch (err) {
-    console.error("Error verifying webhook:", err);
     return new Response("Error: Invalid webhook signature", { status: 400 });
   }
 
@@ -64,7 +62,6 @@ export async function POST(req: Request) {
         },
       });
     } catch (err) {
-      console.error("Error creating user:", err);
       return new Response("Error: Failed to create user", { status: 500 });
     }
   }
@@ -82,7 +79,6 @@ export async function POST(req: Request) {
         create: { id: orgId, name, slug },
       });
     } catch (err) {
-      console.error("Error syncing organization:", err);
       return new Response("Error: Failed to sync organization", {
         status: 500,
       });
@@ -96,7 +92,6 @@ export async function POST(req: Request) {
         await prisma.organization.delete({ where: { id: orgId } });
       }
     } catch (err) {
-      console.error("Error deleting organization:", err);
       return new Response("Error: Failed to delete organization", {
         status: 500,
       });
@@ -142,7 +137,6 @@ export async function POST(req: Request) {
         },
       });
     } catch (err) {
-      console.error("Error creating organization membership:", err);
       return new Response("Error: Failed to create membership", {
         status: 500,
       });
@@ -156,7 +150,6 @@ export async function POST(req: Request) {
         await prisma.organizationMember.delete({ where: { id: membershipId } });
       }
     } catch (err) {
-      console.error("Error deleting organization membership:", err);
       return new Response("Error: Failed to delete membership", {
         status: 500,
       });
@@ -171,7 +164,6 @@ export async function POST(req: Request) {
         data: { role },
       });
     } catch (err) {
-      console.error("Error updating organization membership:", err);
       return new Response("Error: Failed to update membership", {
         status: 500,
       });

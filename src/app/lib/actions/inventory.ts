@@ -39,13 +39,9 @@ async function dispatchWebhooks(organizationId: string, payload: any) {
         headers["x-swiftstock-signature"] = signature;
       }
 
-      fetch(hook.url, { method: "POST", headers, body }).catch((err) => {
-        console.error(`Failed to dispatch webhook to ${hook.url}:`, err);
-      });
+      fetch(hook.url, { method: "POST", headers, body }).catch((err) => {});
     }
-  } catch (err) {
-    console.error("Error dispatching webhooks:", err);
-  }
+  } catch (err) {}
 }
 
 export async function getDashboardData() {
@@ -281,11 +277,6 @@ export async function adjustStock(
 
     if (activeAlertCount > 0) {
       // Simulating the email being sent for the logs
-      console.log(`\n================================`);
-      console.log(`📧 DISPATCHING REAL EMAIL VIA RESEND`);
-      console.log(`To Admin User ID: ${userId}`);
-      console.log(`Subject: Action Required: Low Stock for ${product.name}`);
-      console.log(`================================\n`);
 
       const adminUser = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -309,14 +300,8 @@ export async function adjustStock(
               </div>
             `,
           });
-          console.log(`✅ Real Email sent successfully to ${adminUser.email}`);
-        } catch (error) {
-          console.error("❌ Failed to send real email via Resend:", error);
-        }
+        } catch (error) {}
       } else {
-        console.warn(
-          `⚠️ Could not send email: User ${userId} has no email address on file.`,
-        );
       }
 
       // 🚨 TRIGGER DEVELOPER WEBHOOKS
@@ -428,6 +413,7 @@ export async function addProductAction(data: {
   name: string;
   sku: string;
   categoryId: string;
+  description?: string;
   quantity: number;
   lowStockThreshold: number;
   costPrice: number;
@@ -435,7 +421,7 @@ export async function addProductAction(data: {
   imageUrl?: string;
 }) {
   const validated = addProductSchema.parse(data);
-  const { userId, orgId, orgRole } = await auth();
+  const { userId, orgRole } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
   const { success } = await ratelimit.limit(userId);
@@ -444,7 +430,7 @@ export async function addProductAction(data: {
     throw new Error("Too many requests. Please try again later.");
   }
 
-  const activeOrgId = orgId || userId;
+  const activeOrgId = await getAuthorizedOrgId();
   const user = await currentUser();
   const fn = user?.firstName && user.firstName !== "null" ? user.firstName : "";
   const ln = user?.lastName && user.lastName !== "null" ? user.lastName : "";
@@ -460,17 +446,6 @@ export async function addProductAction(data: {
       id: userId,
       email: userEmail,
       name: userName,
-    },
-  });
-
-  // Upsert organization (treating userId as orgId if strictly personal)
-  await prisma.organization.upsert({
-    where: { slug: activeOrgId },
-    update: {},
-    create: {
-      id: activeOrgId,
-      name: orgId ? "Organization" : `${userName}'s Workspace`,
-      slug: activeOrgId,
     },
   });
 
@@ -498,7 +473,7 @@ export async function addProductAction(data: {
         error: "A product with this SKU already exists.",
       };
     }
-    console.error("Failed to add product:", error);
+
     return { success: false, error: "An unexpected error occurred." };
   }
 }
@@ -535,6 +510,7 @@ export async function updateProductAction(
     name: string;
     sku: string;
     categoryId: string;
+    description?: string;
     costPrice: number;
     sellingPrice: number;
     lowStockThreshold: number;
@@ -680,7 +656,6 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
 
     return result;
   } catch (error: any) {
-    console.error("Bulk Delete Error:", error);
     return {
       success: false,
       error: error.message || "Failed to delete products.",

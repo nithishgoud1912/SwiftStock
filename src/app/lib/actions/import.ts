@@ -101,7 +101,6 @@ export async function importInventoryCSV(csvText: string) {
     revalidatePath("/dashboard/inventory");
     return { success: true, count: rows.length };
   } catch (error: any) {
-    console.error("CSV Import Error:", error);
     return { success: false, error: error.message || "Failed to parse CSV" };
   }
 }
@@ -172,7 +171,6 @@ export async function importTransactionsCSV(csvText: string) {
     revalidatePath("/dashboard/transactions");
     return { success: true, count: importedCount };
   } catch (err: any) {
-    console.error("Transactions CSV Error", err);
     return { success: false, error: err.message || "Failed to parse" };
   }
 }

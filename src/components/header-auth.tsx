@@ -46,7 +46,7 @@ export function HeaderAuth() {
   return (
     <>
       <SideMenu isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
+      <header className="p-2 sticky  top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           {/* Left Side: Logo */}
           <div className="flex items-center gap-4">
@@ -75,7 +75,6 @@ export function HeaderAuth() {
 
           {/* Right Side: Actions */}
           <div className="flex items-center gap-4">
-            <ThemeToggle />
             <SignedOut>
               <div className="flex items-center gap-2">
                 <SignInButton
@@ -105,27 +104,34 @@ export function HeaderAuth() {
             <SignedIn>
               <div className="flex items-center gap-4">
                 <nav className="flex gap-4 text-sm font-medium text-muted-foreground items-center">
-                  <a href="/dashboard" className="hover:text-primary">
+                  <Link href="/dashboard" className="hover:text-primary">
                     Dashboard
-                  </a>
-                  <a href="/dashboard/inventory" className="hover:text-primary">
+                  </Link>
+                  <Link
+                    href="/dashboard/inventory"
+                    className="hover:text-primary"
+                  >
                     Inventory
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/dashboard/transactions"
                     className="hover:text-primary"
                   >
                     Transactions
-                  </a>
-                  <a
+                  </Link>
+                  <Link href="/dashboard/audit" className="hover:text-primary">
+                    Audit Trail
+                  </Link>
+                  <Link
                     href="/dashboard/settings/organization"
                     className="hover:text-primary"
                   >
                     Settings
-                  </a>
+                  </Link>
                 </nav>
                 <div className="flex items-center gap-4">
                   {activeOrgId && <NotificationBell />}
+                  <ThemeToggle />
                   <UserButton appearance={clerkAppearance} />
                 </div>
               </div>

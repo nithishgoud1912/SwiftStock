@@ -6,6 +6,7 @@ import { addProductAction } from "@/app/lib/actions/inventory";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { getCategories, createCategory } from "@/app/lib/actions/settings";
 import { UploadDropzone } from "@/lib/uploadthing";
+import { X } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function AddProductModal() {
@@ -22,6 +23,7 @@ export default function AddProductModal() {
     name: "",
     sku: "",
     categoryId: "",
+    description: "",
     quantity: 0,
     lowStockThreshold: 10,
     costPrice: 0,
@@ -73,6 +75,7 @@ export default function AddProductModal() {
         name: "",
         sku: "",
         categoryId: "",
+        description: "",
         quantity: 0,
         lowStockThreshold: 10,
         costPrice: 0,
@@ -81,14 +84,15 @@ export default function AddProductModal() {
       setErrorMsg("");
     },
     onError: (error) => {
-      console.error("Failed to add product", error);
       setErrorMsg("An unexpected error occurred.");
     },
   });
 
   if (!isAddProductModalOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -112,11 +116,24 @@ export default function AddProductModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700 max-h-[90vh] overflow-y-auto">
-        <h2 className="mb-6 text-2xl font-bold dark:text-white">
-          Add New Product
-        </h2>
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeAddProductModal();
+      }}
+    >
+      <div className="relative z-60 w-full max-w-[calc(100vw-2rem)] md:max-w-lg rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700 max-h-[90vh] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold dark:text-white">
+            Add New Product
+          </h2>
+          <button
+            onClick={closeAddProductModal}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
 
         {errorMsg && (
           <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-4 border border-red-200 dark:border-red-800">
@@ -161,7 +178,7 @@ export default function AddProductModal() {
             ) : (
               <UploadDropzone
                 endpoint="productImage"
-                className="ut-label:text-blue-600 ut-button:bg-blue-600 ut-button:ut-readying:bg-blue-500/50"
+                className="mt-2 ut-label:text-blue-600 ut-button:bg-blue-600 ut-button:ut-readying:bg-blue-500/50 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 shadow-sm items-center justify-center ut-upload-icon:w-6 ut-upload-icon:h-6 ut-label:text-sm ut-allowed-content:text-xs py-4"
                 onClientUploadComplete={(res) => {
                   if (res && res.length > 0) {
                     setImageUrl(res[0].url);
@@ -206,6 +223,20 @@ export default function AddProductModal() {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Description (Optional)
+            </label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              rows={3}
+              placeholder="e.g., Wireless ergonomic mouse with 2.4GHz connectivity..."
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
             <div className="flex justify-between items-center mb-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Category
@@ -236,7 +267,7 @@ export default function AddProductModal() {
                   disabled={
                     !newCategoryName || createCategoryMutation.isPending
                   }
-                  className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-50 transition-colors"
+                  className="bg-gray-900 dark:bg-white text-gray-900 dark:text-gray-900 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-50 transition-colors"
                 >
                   {createCategoryMutation.isPending ? "..." : "Save"}
                 </button>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useInventoryStore } from "@/app/lib/store/useInventoryStore";
 import { adjustStock } from "@/app/lib/actions/inventory";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function AdjustStockModal() {
@@ -80,11 +81,23 @@ export default function AdjustStockModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
-        <h2 className="mb-4 text-xl font-bold dark:text-white">
-          {isAdding ? "Add Stock (IN)" : "Remove Stock (OUT)"}
-        </h2>
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        onClick={closeAdjustModal}
+      />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold dark:text-white">
+            {isAdding ? "Add Stock (IN)" : "Remove Stock (OUT)"}
+          </h2>
+          <button
+            onClick={closeAdjustModal}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -125,6 +138,6 @@ export default function AdjustStockModal() {
           </div>
         </form>
       </div>
-    </div>
+    </>
   );
 }

@@ -97,6 +97,13 @@ const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
                 >
                   Approvals
                 </Link>
+                <Link
+                  href="/dashboard/audit"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
+                >
+                  Audit Trail
+                </Link>
               </nav>
             </SignedIn>
 

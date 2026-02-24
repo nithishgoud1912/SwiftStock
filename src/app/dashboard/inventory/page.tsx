@@ -46,7 +46,6 @@ export default async function InventoryPage() {
           <InventoryTable initialProducts={data.products} />
         </div>
       </div>
-
       <AddProductModal />
     </div>
   );

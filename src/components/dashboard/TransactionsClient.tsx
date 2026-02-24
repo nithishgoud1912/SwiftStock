@@ -68,7 +68,6 @@ export default function TransactionsClient() {
         toast.error(`Failed to import: ${result.error}`);
       }
     } catch (err) {
-      console.error(err);
       toast.error("An unexpected error occurred reading the file.");
     } finally {
       setIsImporting(false);
@@ -161,9 +160,9 @@ export default function TransactionsClient() {
   }
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="flex justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        <div className="flex items-center sm:flex-row gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-64">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
               <Search className="h-4 w-4 text-gray-400" />
