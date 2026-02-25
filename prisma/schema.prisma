@@ -36,6 +36,10 @@ model User {
 model Organization {
   id            String               @id @default(cuid())
   name          String
+  address       String?
+  city          String?
+  contact       String?
+  logoUrl       String?
   slug          String               @unique
   currency      String               @default("INR")
   createdAt     DateTime             @default(now())

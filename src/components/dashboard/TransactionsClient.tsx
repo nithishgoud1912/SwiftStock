@@ -17,8 +17,14 @@ import { useEffect, useState, useRef } from "react";
 import { useDebounce } from "use-debounce";
 import { importTransactionsCSV } from "@/app/lib/actions/import";
 import toast from "react-hot-toast";
+import { generateInvoice } from "@/lib/utils/generateInvoice";
+import { FileText } from "lucide-react"; // add FileText to your lucide-react imports
 
-export default function TransactionsClient() {
+export default function TransactionsClient({
+  organization,
+}: {
+  organization: any;
+}) {
   const { ref, inView } = useInView();
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -237,6 +243,7 @@ export default function TransactionsClient() {
               <th className="px-6 py-4 font-medium">Quantity</th>
               <th className="px-6 py-4 font-medium">User</th>
               <th className="px-6 py-4 font-medium">Notes</th>
+              <th className="px-6 py-4 font-medium text-right">Receipt</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -291,6 +298,15 @@ export default function TransactionsClient() {
                 </td>
                 <td className="px-6 py-4 text-gray-600 dark:text-gray-400 max-w-xs truncate">
                   {tx.notes || "—"}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right">
+                  <button
+                    onClick={() => generateInvoice(tx, organization)}
+                    className="text-[#6c47ff] hover:bg-[#6c47ff]/10 p-2 rounded-md inline-flex items-center justify-center transition-colors"
+                    title="Download Receipt"
+                  >
+                    <FileText size={18} />
+                  </button>
                 </td>
               </tr>
             ))}

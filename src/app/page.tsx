@@ -17,7 +17,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 font-sans selection:bg-[#6c47ff]/30 selection:text-[#6c47ff]">
-      <main className="pt-24 pb-16">
+      <main className="pb-16">
         {/* Hero Section */}
         <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-32 text-center">
           {/* Background Glow */}

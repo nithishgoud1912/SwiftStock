@@ -3,6 +3,8 @@ import { OrganizationProfile } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import MembersClient from "@/components/dashboard/settings/MembersClient";
+import { prisma } from "@/lib/prisma";
+import OrganizationDetailsForm from "@/components/dashboard/settings/OrganizationDetailsForm";
 
 export const metadata: Metadata = {
   title: "Organization | SwiftStock Settings",
@@ -12,6 +14,12 @@ export const metadata: Metadata = {
 export default async function OrganizationSettingsPage() {
   const { orgId } = await auth();
   if (!orgId) redirect("/dashboard");
+
+  const organization = await prisma.organization.findUnique({
+    where: {
+      id: orgId,
+    },
+  });
 
   return (
     <div className="w-auto h-auto flex flex-col items-center overflow-y-auto">
@@ -31,6 +39,10 @@ export default async function OrganizationSettingsPage() {
             },
           }}
         />
+      </div>
+
+      <div className="px-6 pb-12 w-full max-w-6xl mt-4">
+        <OrganizationDetailsForm organization={organization} />
       </div>
 
       <div className="px-6 pb-12">

@@ -46,7 +46,7 @@ export function HeaderAuth() {
   return (
     <>
       <SideMenu isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
-      <header className="p-2 sticky  top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
+      <header className="pl-2 sticky  top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           {/* Left Side: Logo */}
           <div className="flex items-center gap-4">

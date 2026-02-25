@@ -8,6 +8,7 @@ import {
   createCategorySchema,
   updateCategorySchema,
   entityIdSchema,
+  updateOrgProfileSchema,
 } from "@/lib/validations";
 
 // ==============================
@@ -197,4 +198,28 @@ export async function getOrganizationMembers() {
   });
 
   return members;
+}
+
+export async function updateOrganizationProfile(data: {
+  address?: string | null;
+  city?: string | null;
+  contact?: string | null;
+  logoUrl?: string | null;
+}) {
+  const validated = updateOrgProfileSchema.parse(data);
+  const organizationId = await getAuthorizedOrgId();
+
+  const organization = await prisma.organization.update({
+    where: { id: organizationId },
+    data: {
+      address: validated.address,
+      city: validated.city,
+      contact: validated.contact,
+      logoUrl: validated.logoUrl,
+    },
+  });
+
+  revalidatePath("/dashboard/settings/organization");
+
+  return organization;
 }

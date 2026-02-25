@@ -114,3 +114,10 @@ export const toggleWebhookSchema = z.object({
   id: z.string().min(1, "Webhook ID is required"),
   isActive: z.boolean(),
 });
+
+export const updateOrgProfileSchema = z.object({
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  contact: z.string().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable().or(z.literal("")),
+});

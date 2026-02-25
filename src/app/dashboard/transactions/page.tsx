@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import TransactionsClient from "@/components/dashboard/TransactionsClient";
+import { prisma } from "@/lib/prisma";
+
 
 export const metadata: Metadata = {
   title: "Transactions | SwiftStock",
@@ -15,6 +17,14 @@ export default async function TransactionsPage() {
     redirect("/sign-in");
   }
 
+  const organization = await prisma.organization.findUnique({
+    where: { id: orgId },
+  });
+
+  if (!organization) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="p-6 space-y-6">
       <header className="mb-8">
@@ -26,7 +36,7 @@ export default async function TransactionsPage() {
         </p>
       </header>
 
-      <TransactionsClient />
+      <TransactionsClient organization={organization}/>
     </div>
   );
 }

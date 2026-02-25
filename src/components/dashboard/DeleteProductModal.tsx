@@ -41,12 +41,13 @@ export default function DeleteProductModal() {
   if (!isDeleteProductModalOpen || productsToDelete.length === 0) return null;
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-        onClick={closeDeleteProductModal}
-      />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
+    <div
+      className="fixed inset-0 z-100 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeDeleteProductModal();
+      }}
+    >
+      <div className="relative w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-start mb-2">
           <h2 className="text-xl font-bold text-red-600 dark:text-red-500">
             Delete {isBulk ? `${productsToDelete.length} Products` : "Product"}?
@@ -91,6 +92,6 @@ export default function DeleteProductModal() {
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { adjustStock } from "@/app/lib/actions/inventory";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
+import { generateInvoice } from "@/lib/utils/generateInvoice";
 
 export default function AdjustStockModal() {
   const {
@@ -73,6 +74,10 @@ export default function AdjustStockModal() {
       onSuccess: (data: any) => {
         if (data && data.status === "PENDING") {
           toast.success("Stock adjustment sent to an Admin for approval.");
+        } else {
+          toast.success(
+            "Stock adjustment successful. Download the reciept from the Transaction Ledger",
+          );
         }
         closeAdjustModal();
         setAmount("");
@@ -81,12 +86,13 @@ export default function AdjustStockModal() {
   };
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-        onClick={closeAdjustModal}
-      />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700">
+    <div
+      className="fixed inset-0 z-100 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeAdjustModal();
+      }}
+    >
+      <div className="relative w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-6 shadow-2xl border border-transparent dark:border-gray-700 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold dark:text-white">
             {isAdding ? "Add Stock (IN)" : "Remove Stock (OUT)"}
@@ -138,6 +144,6 @@ export default function AdjustStockModal() {
           </div>
         </form>
       </div>
-    </>
+    </div>
   );
 }
