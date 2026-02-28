@@ -6,24 +6,29 @@ import toast from "react-hot-toast";
 import { UploadDropzone } from "@/lib/uploadthing";
 import { X } from "lucide-react";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 type OrganizationDetailsFormProps = {
   organization: {
     address: string | null;
     city: string | null;
     contact: string | null;
     logoUrl: string | null;
+    currency: string;
   } | null;
 };
 
 export default function OrganizationDetailsForm({
   organization,
 }: OrganizationDetailsFormProps) {
+  const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     address: organization?.address || "",
     city: organization?.city || "",
     contact: organization?.contact || "",
     logoUrl: organization?.logoUrl || "",
+    currency: organization?.currency || "INR",
   });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -35,8 +40,11 @@ export default function OrganizationDetailsForm({
         city: formData.city,
         contact: formData.contact,
         logoUrl: formData.logoUrl,
+        currency: formData.currency,
       });
       toast.success("Organization profile updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["organization"] });
     } catch (error) {
       toast.error("Failed to update organization profile");
     } finally {
@@ -44,7 +52,9 @@ export default function OrganizationDetailsForm({
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -108,6 +118,24 @@ export default function OrganizationDetailsForm({
               placeholder="billing@example.com"
               className="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 focus:border-[#6c47ff] focus:ring-[#6c47ff] sm:text-sm border transition-colors shadow-sm"
             />
+          </div>
+
+          {/* Currency */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Currency
+            </label>
+            <select
+              name="currency"
+              value={formData.currency}
+              onChange={handleChange}
+              className="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 focus:border-[#6c47ff] focus:ring-[#6c47ff] sm:text-sm border transition-colors shadow-sm"
+            >
+              <option value="INR">INR (₹)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
           </div>
 
           {/* Logo Upload */}

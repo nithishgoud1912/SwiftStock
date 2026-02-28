@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   getDashboardData,
   getRecentActivity,
+  getActiveWebhooksCount,
 } from "@/app/lib/actions/inventory";
 import DashboardWidgets from "@/components/dashboard/DashboardWidgets";
 import RecentActivityFeed from "@/components/dashboard/RecentActivityFeed";
@@ -10,7 +11,6 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck, Activity } from "lucide-react";
-import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Dashboard | SwiftStock",
@@ -33,9 +33,7 @@ export default async function DashboardPage() {
   const recentActivity = await getRecentActivity();
 
   // Fetch a quick count of active webhooks for the status widget
-  const activeWebhooksCount = await prisma.webhookConfig.count({
-    where: { organizationId: activeOrgId, isActive: true },
-  });
+  const activeWebhooksCount = await getActiveWebhooksCount();
 
   return (
     <div className="p-6 space-y-6">
@@ -51,7 +49,7 @@ export default async function DashboardPage() {
       </header>
 
       {/* Dynamic KPI Cards (Connected to TanStack Query for zero-lag updates) */}
-      <DashboardWidgets initialData={dashboardData} />
+      <DashboardWidgets initialData={dashboardData as any} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
         {/* Main Content Area: Chart + Recent Activity */}

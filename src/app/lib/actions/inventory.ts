@@ -39,9 +39,13 @@ async function dispatchWebhooks(organizationId: string, payload: any) {
         headers["x-swiftstock-signature"] = signature;
       }
 
-      fetch(hook.url, { method: "POST", headers, body }).catch((err) => {});
+      fetch(hook.url, { method: "POST", headers, body }).catch((err) => {
+        console.error(`[Webhook] Failed to dispatch to ${hook.url}:`, err);
+      });
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error("[Webhook] dispatchWebhooks error:", err);
+  }
 }
 
 export async function getDashboardData() {
@@ -69,10 +73,16 @@ export async function getDashboardData() {
         (p) => p.quantity <= p.lowStockThreshold,
       );
 
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { currency: true },
+      });
+
       return {
         products: plainProducts,
         lowStockCount: lowStockItems.length,
         totalItems: plainProducts.reduce((acc, p) => acc + p.quantity, 0),
+        currency: org?.currency || "INR",
       };
     },
     [`dashboard-${organizationId}`],
@@ -180,6 +190,10 @@ export async function adjustStock(
   });
   const { userId, orgRole, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  if (!rateLimitOk)
+    throw new Error("Too many requests. Please try again later.");
 
   const requiresApproval = orgId ? orgRole !== "org:admin" : false;
 
@@ -524,6 +538,13 @@ export async function updateProductAction(
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can edit products." };
 
+  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  if (!rateLimitOk)
+    return {
+      success: false,
+      error: "Too many requests. Please try again later.",
+    };
+
   const user = await currentUser();
   const userName = user?.firstName
     ? `${user.firstName} ${user.lastName || ""}`
@@ -569,6 +590,13 @@ export async function deleteProductAction(productId: string) {
   if (!userId) throw new Error("Unauthorized");
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can delete products." };
+
+  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  if (!rateLimitOk)
+    return {
+      success: false,
+      error: "Too many requests. Please try again later.",
+    };
   const user = await currentUser();
   const userName = user?.firstName
     ? `${user.firstName} ${user.lastName || ""}`
@@ -605,6 +633,13 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
   if (!userId) throw new Error("Unauthorized");
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can delete products." };
+
+  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  if (!rateLimitOk)
+    return {
+      success: false,
+      error: "Too many requests. Please try again later.",
+    };
 
   const activeOrgId = orgId || userId;
   const user = await currentUser();
@@ -902,4 +937,11 @@ export async function getAnalyticsData() {
       day: "numeric",
     }),
   }));
+}
+
+export async function getActiveWebhooksCount() {
+  const organizationId = await getAuthorizedOrgId();
+  return prisma.webhookConfig.count({
+    where: { organizationId, isActive: true },
+  });
 }

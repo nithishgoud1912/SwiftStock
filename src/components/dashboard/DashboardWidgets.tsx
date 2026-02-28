@@ -17,7 +17,12 @@ export default function DashboardWidgets({
   initialData,
 }: {
   initialData:
-    | { products: Product[]; lowStockCount: number; totalItems: number }
+    | {
+        products: Product[];
+        lowStockCount: number;
+        totalItems: number;
+        currency: string;
+      }
     | undefined;
 }) {
   const { data } = useQuery({
@@ -37,11 +42,14 @@ export default function DashboardWidgets({
     (p: Product) => p.quantity <= p.lowStockThreshold,
   ).length;
 
-  // New Metric: Total Portfolio Value (Cost * Quantity)
+  // New Metric: Total Portfolio Value (Selling Price * Quantity)
   const totalValue = products.reduce(
-    (sum: number, p: Product) => sum + Number(p.costPrice) * p.quantity,
+    (sum: number, p: Product) => sum + Number(p.sellingPrice) * p.quantity,
     0,
   );
+
+  const orgCurrency = data?.currency || "INR";
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {/* 1. Total Unique */}
@@ -82,11 +90,11 @@ export default function DashboardWidgets({
               Total Portfolio Value
             </p>
             <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(totalValue, "INR")}
+              {formatCurrency(totalValue, orgCurrency)}
             </p>
           </div>
           <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-emerald-600 dark:text-emerald-400">
-            <span className="font-bold text-xl px-1">₹</span>
+            <span className="font-bold text-xl px-1">{orgCurrency}</span>
           </div>
         </div>
       </div>

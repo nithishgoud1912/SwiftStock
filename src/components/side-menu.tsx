@@ -1,5 +1,12 @@
 import React, { Dispatch, SetStateAction, useEffect } from "react";
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import {
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  useOrganization,
+  useAuth,
+} from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "./ui/button";
 
@@ -9,6 +16,9 @@ interface SideMenuProps {
 }
 
 const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
+  const { membership } = useOrganization();
+  const { orgId } = useAuth();
+  const isAdmin = !orgId || membership?.role === "org:admin";
   // Prevent scrolling when menu is open
   useEffect(() => {
     if (isMenuOpen) {
@@ -103,6 +113,29 @@ const SideMenu = ({ isMenuOpen, setIsMenuOpen }: SideMenuProps) => {
                   className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
                 >
                   Audit Trail
+                </Link>
+                <Link
+                  href="/dashboard/settings"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
+                >
+                  Settings
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href="/dashboard/settings/webhooks"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
+                  >
+                    Webhooks
+                  </Link>
+                )}
+                <Link
+                  href="/dashboard/settings/organization"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="px-4 py-3 rounded-md hover:bg-muted font-medium transition-colors"
+                >
+                  Organization
                 </Link>
               </nav>
             </SignedIn>

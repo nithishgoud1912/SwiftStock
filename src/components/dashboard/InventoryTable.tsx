@@ -25,11 +25,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getInventoryProducts } from "@/app/lib/actions/inventory";
 import { useOrganization, useAuth } from "@clerk/nextjs";
 import toast from "react-hot-toast";
-import { getCategories } from "@/app/lib/actions/settings";
-
-// Inside the component:
-
+import { getCategories, getOrganization } from "@/app/lib/actions/settings";
+import { ExportPdfButton } from "../ui/ExportPdfButton";
 import { Product } from "@/types/inventory";
+import { formatCurrency } from "@/lib/utils";
 
 export default function InventoryTable({
   initialProducts,
@@ -61,11 +60,57 @@ export default function InventoryTable({
     new Set(),
   );
 
+  const getPdfData = () => {
+    const columns = [
+      "Name",
+      "SKU",
+      "Category",
+      "Quantity",
+      "Cost Price",
+      "Selling Price",
+      "Status",
+    ];
+    const data = displayProducts.map((p) => [
+      p.name,
+      p.sku || "N/A",
+      p.category?.name || "N/A",
+      p.quantity.toString(),
+      formatCurrency(Number(p.costPrice), organization?.currency),
+      formatCurrency(Number(p.sellingPrice), organization?.currency),
+      p.quantity < 10 ? "Low Stock" : "In Stock",
+    ]);
+
+    return { columns, data };
+  };
+
+  // Ref for the search input to focus on Ctrl+K
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Debounce search input to avoid excessive server calls
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Keyboard Shortcuts (Alt+K / Cmd+K for search, Alt+N for new product)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Focus Search: Alt+K or Cmd+K
+      if ((e.altKey || e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+
+      // Add Product: Alt+N
+      if (e.altKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        useInventoryStore.getState().openAddProductModal();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Clear selection if the delete modal successfully closes and clears the store
   useEffect(() => {
@@ -95,6 +140,12 @@ export default function InventoryTable({
     queryFn: () => getCategories(),
   });
 
+  // Fetch organization settings for the PDF
+  const { data: organization } = useQuery({
+    queryKey: ["organization"],
+    queryFn: () => getOrganization(),
+  });
+
   const displayProducts = data?.products || [];
 
   const handleExportCSV = () => {
@@ -109,7 +160,7 @@ export default function InventoryTable({
       "Cost Price",
       "Selling Price",
     ];
-    const csvRows = displayProducts.map((p: any) => [
+    const csvRows = displayProducts.map((p: Product) => [
       `"${p.name.replace(/"/g, '""')}"`,
       `"${p.sku}"`,
       `"${p.category?.name || "Uncategorized"}"`,
@@ -198,8 +249,9 @@ export default function InventoryTable({
               <Search size={16} className="text-gray-400" />
             </div>
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search by name or SKU..."
+              placeholder="Search by name or SKU... (Alt+K)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6c47ff] focus:border-[#6c47ff] sm:text-sm transition-colors"
@@ -285,6 +337,21 @@ export default function InventoryTable({
             <Download size={16} />
             Export to CSV
           </button>
+
+          <ExportPdfButton
+            title="Current Inventory Report"
+            getData={getPdfData}
+            orgName={membership?.organization?.name || "SwiftStock"}
+            orgLogo={
+              organization?.logoUrl || membership?.organization?.imageUrl
+            }
+            orgAddress={
+              [organization?.address, organization?.city, organization?.contact]
+                .filter(Boolean)
+                .join(" | ") || undefined
+            }
+            filename={`SwiftStock_Inventory_${new Date().toISOString().split("T")[0]}.pdf`}
+          />
         </div>
       </div>
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
@@ -325,6 +392,12 @@ export default function InventoryTable({
                 Quantity
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/50 dark:bg-gray-900/50">
+                Cost Price
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/50 dark:bg-gray-900/50">
+                Selling Price
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/50 dark:bg-gray-900/50">
                 Status
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50/50 dark:bg-gray-900/50">
@@ -333,119 +406,150 @@ export default function InventoryTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {displayProducts.map((item: any) => (
-              <tr
-                key={item.id}
-                className={`hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors group ${selectedProductIds.has(item.id) ? "bg-[#6c47ff]/5 dark:bg-[#6c47ff]/10" : ""}`}
-              >
-                {isAdmin && (
-                  <td className="px-6 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.has(item.id)}
-                      onChange={(e) => {
-                        const newSet = new Set(selectedProductIds);
-                        if (e.target.checked) {
-                          newSet.add(item.id);
-                        } else {
-                          newSet.delete(item.id);
-                        }
-                        setSelectedProductIds(newSet);
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-[#6c47ff] focus:ring-[#6c47ff]"
-                    />
-                  </td>
-                )}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-3">
-                    {item.imageUrl ? (
-                      <div className="h-10 w-10 shrink-0">
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="h-10 w-10 rounded-md object-cover border border-gray-200 dark:border-gray-700"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                        <Package className="h-5 w-5 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="font-semibold text-gray-900 dark:text-white group-hover:text-[#6c47ff] dark:group-hover:text-[#8b6fff] transition-colors">
-                      {item.name}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
-                  {item.sku}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">
-                    {item.category?.name || "Uncategorized"}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-lg font-bold text-gray-900 dark:text-white">
-                    {item.quantity}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    Min: {item.lowStockThreshold}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {item.quantity <= item.lowStockThreshold ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs font-semibold">
-                      <AlertCircle size={14} /> Low Stock
-                    </span>
-                  ) : (
-                    <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-semibold">
-                      In Stock
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <div className="flex justify-end gap-2 items-center">
-                    <button
-                      onClick={() => openAdjustModal(item.id, "IN")}
-                      className="inline-flex items-center gap-1 rounded bg-green-50 dark:bg-green-900/20 px-3 py-1 text-sm font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
-                    >
-                      <Plus size={16} /> Add
-                    </button>
-                    <button
-                      onClick={() => openAdjustModal(item.id, "OUT")}
-                      className="inline-flex items-center gap-1 rounded bg-red-50 dark:bg-red-900/20 px-3 py-1 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
-                    >
-                      <Minus size={16} /> Remove
-                    </button>
-                    {isAdmin && (
-                      <div className="inline-flex items-center ml-2 border-l border-gray-300 dark:border-gray-600 pl-2">
-                        <button
-                          onClick={() => openManageBarcodesModal(item)}
-                          className="rounded-lg p-2 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/30 mr-1"
-                          title="Manage Barcodes"
-                        >
-                          <QrCode className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => openEditProductModal(item)}
-                          className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 mr-1"
-                          title="Edit Product"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteProductModal(item)}
-                          className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
+            {displayProducts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={isAdmin ? 9 : 8}
+                  className="px-6 py-16 text-center"
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <Package className="h-12 w-12 text-gray-300 dark:text-gray-600" />
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      No products found
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Try adjusting your search or filters
+                    </p>
                   </div>
                 </td>
               </tr>
-            ))}
+            ) : (
+              displayProducts.map((item: Product) => (
+                <tr
+                  key={item.id}
+                  className={`hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors group ${selectedProductIds.has(item.id) ? "bg-[#6c47ff]/5 dark:bg-[#6c47ff]/10" : ""}`}
+                >
+                  {isAdmin && (
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.has(item.id)}
+                        onChange={(e) => {
+                          const newSet = new Set(selectedProductIds);
+                          if (e.target.checked) {
+                            newSet.add(item.id);
+                          } else {
+                            newSet.delete(item.id);
+                          }
+                          setSelectedProductIds(newSet);
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-[#6c47ff] focus:ring-[#6c47ff]"
+                      />
+                    </td>
+                  )}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-3">
+                      {item.imageUrl ? (
+                        <div className="h-10 w-10 shrink-0">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-10 w-10 rounded-md object-cover border border-gray-200 dark:border-gray-700"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                          <Package className="h-5 w-5 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="font-semibold text-gray-900 dark:text-white group-hover:text-[#6c47ff] dark:group-hover:text-[#8b6fff] transition-colors">
+                        {item.name}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">
+                    {item.sku}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">
+                      {item.category?.name || "Uncategorized"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-lg font-bold text-gray-900 dark:text-white">
+                      {item.quantity}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Min: {item.lowStockThreshold}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {formatCurrency(
+                      Number(item.costPrice),
+                      organization?.currency,
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    {formatCurrency(
+                      Number(item.sellingPrice),
+                      organization?.currency,
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {item.quantity <= item.lowStockThreshold ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs font-semibold">
+                        <AlertCircle size={14} /> Low Stock
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-semibold">
+                        In Stock
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <div className="flex justify-end gap-2 items-center">
+                      <button
+                        onClick={() => openAdjustModal(item.id, "IN")}
+                        className="inline-flex items-center gap-1 rounded bg-green-50 dark:bg-green-900/20 px-3 py-1 text-sm font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
+                      >
+                        <Plus size={16} /> Add
+                      </button>
+                      <button
+                        onClick={() => openAdjustModal(item.id, "OUT")}
+                        className="inline-flex items-center gap-1 rounded bg-red-50 dark:bg-red-900/20 px-3 py-1 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
+                      >
+                        <Minus size={16} /> Remove
+                      </button>
+                      {isAdmin && (
+                        <div className="inline-flex items-center ml-2 border-l border-gray-300 dark:border-gray-600 pl-2">
+                          <button
+                            onClick={() => openManageBarcodesModal(item)}
+                            className="rounded-lg p-2 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/30 mr-1"
+                            title="Manage Barcodes"
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => openEditProductModal(item)}
+                            className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 mr-1"
+                            title="Edit Product"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => openDeleteProductModal(item)}
+                            className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                            title="Delete Product"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -120,4 +120,5 @@ export const updateOrgProfileSchema = z.object({
   city: z.string().optional().nullable(),
   contact: z.string().optional().nullable(),
   logoUrl: z.string().url().optional().nullable().or(z.literal("")),
+  currency: z.string().length(3, "Currency must be 3 characters long").optional(),
 });

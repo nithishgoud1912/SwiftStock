@@ -31,7 +31,7 @@ export async function getAuthorizedOrgId(): Promise<string> {
         },
       });
     } catch (err) {
-      // Failed to upsert Personal Workspace but we can still return targetId and let the database constraint handle it if it truly fails
+      console.error("[Auth] Failed to upsert Personal Workspace:", err);
     }
   } else {
     // Check if the Clerk org actually exists in Prisma to debug P2003
@@ -54,7 +54,7 @@ export async function getAuthorizedOrgId(): Promise<string> {
           },
         });
       } catch (err) {
-        // Sync failed, likely will result in P2003 which will be caught upstream
+        console.error("[Auth] Failed to sync Clerk org to Prisma:", err);
       }
     }
   }

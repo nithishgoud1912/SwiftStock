@@ -205,6 +205,7 @@ export async function updateOrganizationProfile(data: {
   city?: string | null;
   contact?: string | null;
   logoUrl?: string | null;
+  currency?: string;
 }) {
   const validated = updateOrgProfileSchema.parse(data);
   const organizationId = await getAuthorizedOrgId();
@@ -216,10 +217,19 @@ export async function updateOrganizationProfile(data: {
       city: validated.city,
       contact: validated.contact,
       logoUrl: validated.logoUrl,
+      currency: validated.currency,
     },
   });
 
   revalidatePath("/dashboard/settings/organization");
+  revalidateTag(`inventory-${organizationId}`, "default" as any);
 
   return organization;
+}
+
+export async function getOrganization() {
+  const organizationId = await getAuthorizedOrgId();
+  return prisma.organization.findUnique({
+    where: { id: organizationId },
+  });
 }
