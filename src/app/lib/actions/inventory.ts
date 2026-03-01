@@ -14,6 +14,7 @@ import {
   paginationSchema,
 } from "@/lib/validations";
 import crypto from "crypto";
+import { canPerformAction } from "../permissions";
 
 // Helper to fire actual HTTP requests to registered webhooks
 async function dispatchWebhooks(organizationId: string, payload: any) {
@@ -45,6 +46,58 @@ async function dispatchWebhooks(organizationId: string, payload: any) {
     }
   } catch (err) {
     console.error("[Webhook] dispatchWebhooks error:", err);
+  }
+}
+
+async function dispatchAlertsIfLowStock(product: any, userId: string) {
+  if (product.quantity <= product.lowStockThreshold) {
+    const activeAlertCount = await prisma.lowStockAlert.count({
+      where: { productId: product.id, notified: true },
+    });
+
+    if (activeAlertCount > 0) {
+      const adminUser = await prisma.user.findUnique({ where: { id: userId } });
+      const org = await prisma.organization.findUnique({
+        where: { id: product.organizationId },
+        select: { subscriptionTier: true },
+      });
+
+      if (adminUser?.email && org?.subscriptionTier === "PRO") {
+        try {
+          await resend.emails.send({
+            from: "SwiftStock Alerts <onboarding@resend.dev>",
+            to: adminUser.email,
+            subject: `Action Required: Low Stock for ${product.name}`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #d97706;">⚠️ Low Stock Alert</h2>
+                <p>Warning: You are running out of <strong>${product.name}</strong> (SKU: ${product.sku}).</p>
+                <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                  <p style="margin: 0;">You only have <span style="font-size: 1.25rem; font-weight: bold; color: #b45309;">${product.quantity}</span> left in stock.</p>
+                  <p style="margin: 4px 0 0 0; color: #78350f; font-size: 0.875rem;">(Threshold: ${product.lowStockThreshold})</p>
+                </div>
+                <p>Please log in to your SwiftStock dashboard and reorder immediately to avoid stockouts.</p>
+                <hr style="border: 1px solid #f3f4f6; margin: 24px 0;" />
+                <p style="color: #6b7280; font-size: 0.75rem;">Automated alert from your SwiftStock application.</p>
+              </div>
+            `,
+          });
+        } catch (error) {}
+      }
+
+      // 🚨 TRIGGER DEVELOPER WEBHOOKS
+      dispatchWebhooks(product.organizationId, {
+        event: "stock.low",
+        product: {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          quantity: product.quantity,
+          threshold: product.lowStockThreshold,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }
 
@@ -195,6 +248,20 @@ export async function adjustStock(
   if (!rateLimitOk)
     throw new Error("Too many requests. Please try again later.");
 
+  const productInfo = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { organizationId: true },
+  });
+  if (!productInfo) throw new Error("Product not found");
+
+  const permCheck = await canPerformAction(
+    productInfo.organizationId,
+    "TRANSACTION",
+  );
+  if (!permCheck.allowed) {
+    throw new Error(permCheck.reason);
+  }
+
   const requiresApproval = orgId ? orgRole !== "org:admin" : false;
 
   if (requiresApproval) {
@@ -244,6 +311,11 @@ export async function adjustStock(
       },
     });
 
+    await tx.organization.update({
+      where: { id: updatedProduct.organizationId },
+      data: { dailyTxCount: { increment: 1 } },
+    });
+
     // Smart Low Stock Alert handling
     if (updatedProduct.quantity <= updatedProduct.lowStockThreshold) {
       // Create alert only if there isn't an active one already
@@ -284,54 +356,7 @@ export async function adjustStock(
   revalidatePath("/dashboard/approvals");
 
   // DISPATCH Outside of Transaction to prevent connection pool exhaustion
-  if (product.quantity <= product.lowStockThreshold) {
-    const activeAlertCount = await prisma.lowStockAlert.count({
-      where: { productId: product.id, notified: true }, // Assuming 'notified' flag maps to the recent created alert in transaction, simple approximation since alert deduplication happens inside the tx
-    });
-
-    if (activeAlertCount > 0) {
-      // Simulating the email being sent for the logs
-
-      const adminUser = await prisma.user.findUnique({ where: { id: userId } });
-
-      if (adminUser?.email) {
-        try {
-          await resend.emails.send({
-            from: "SwiftStock Alerts <onboarding@resend.dev>", // Resend's default testing email
-            to: adminUser.email,
-            subject: `Action Required: Low Stock for ${product.name}`,
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #d97706;">⚠️ Low Stock Alert</h2>
-                <p>Warning: You are running out of <strong>${product.name}</strong> (SKU: ${product.sku}).</p>
-                <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                  <p style="margin: 0;">You only have <span style="font-size: 1.25rem; font-weight: bold; color: #b45309;">${product.quantity}</span> left in stock.</p>
-                  <p style="margin: 4px 0 0 0; color: #78350f; font-size: 0.875rem;">(Threshold: ${product.lowStockThreshold})</p>
-                </div>
-                <p>Please log in to your SwiftStock dashboard and reorder immediately to avoid stockouts.</p>
-                <hr style="border: 1px solid #f3f4f6; margin: 24px 0;" />
-                <p style="color: #6b7280; font-size: 0.75rem;">Automated alert from your SwiftStock application.</p>
-              </div>
-            `,
-          });
-        } catch (error) {}
-      } else {
-      }
-
-      // 🚨 TRIGGER DEVELOPER WEBHOOKS
-      dispatchWebhooks(product.organizationId, {
-        event: "stock.low",
-        product: {
-          id: product.id,
-          name: product.name,
-          sku: product.sku,
-          quantity: product.quantity,
-          threshold: product.lowStockThreshold,
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+  await dispatchAlertsIfLowStock(product, userId);
 
   revalidatePath("/dashboard", "layout");
   return product;
@@ -404,6 +429,23 @@ export async function createProduct({
       });
     }
 
+    // Smart Low Stock Alert handling for initial creation
+    if (newProduct.quantity <= newProduct.lowStockThreshold) {
+      await tx.lowStockAlert.create({
+        data: { productId: newProduct.id, notified: true },
+      });
+      await tx.emailNotification.create({
+        data: {
+          userId: userId,
+          organizationId: newProduct.organizationId,
+          eventType: "LOW_STOCK_ALERT",
+          subject: `Action Required: Low Stock for ${newProduct.name}`,
+          body: `Warning: You are running out of ${newProduct.name} (SKU: ${newProduct.sku}). You only have ${newProduct.quantity} left in stock (Threshold: ${newProduct.lowStockThreshold}). Please reorder immediately to avoid stockouts.`,
+          status: "PENDING_DELIVERY",
+        },
+      });
+    }
+
     // 3. Create an Audit Log for the overarching action
     await tx.auditLog.create({
       data: {
@@ -445,6 +487,12 @@ export async function addProductAction(data: {
   }
 
   const activeOrgId = await getAuthorizedOrgId();
+
+  const permCheck = await canPerformAction(activeOrgId, "ADD_PRODUCT");
+  if (!permCheck.allowed) {
+    return { success: false, error: permCheck.reason };
+  }
+
   const user = await currentUser();
   const fn = user?.firstName && user.firstName !== "null" ? user.firstName : "";
   const ln = user?.lastName && user.lastName !== "null" ? user.lastName : "";
@@ -478,6 +526,9 @@ export async function addProductAction(data: {
     });
 
     revalidateTag(`inventory-${activeOrgId}`, "default");
+    revalidatePath("/dashboard", "layout");
+
+    await dispatchAlertsIfLowStock(product, userId);
 
     return { success: true, product };
   } catch (error: any) {
@@ -545,11 +596,17 @@ export async function updateProductAction(
       error: "Too many requests. Please try again later.",
     };
 
+  const activeOrgId = orgId || userId;
+
+  const permCheck = await canPerformAction(activeOrgId, "UPDATE_STOCK");
+  if (!permCheck.allowed) {
+    return { success: false, error: permCheck.reason };
+  }
+
   const user = await currentUser();
   const userName = user?.firstName
     ? `${user.firstName} ${user.lastName || ""}`
     : "Unknown";
-  const activeOrgId = orgId || userId;
 
   try {
     const updatedProduct = await prisma.$transaction(async (tx) => {
@@ -557,6 +614,37 @@ export async function updateProductAction(
         where: { id: productId },
         data,
       });
+
+      await tx.organization.update({
+        where: { id: activeOrgId },
+        data: { dailyUpdateCount: { increment: 1 } },
+      });
+
+      if (product.quantity <= product.lowStockThreshold) {
+        const activeAlert = await tx.lowStockAlert.findFirst({
+          where: { productId: product.id, resolvedAt: null },
+        });
+        if (!activeAlert) {
+          await tx.lowStockAlert.create({
+            data: { productId: product.id, notified: true },
+          });
+          await tx.emailNotification.create({
+            data: {
+              userId: userId,
+              organizationId: product.organizationId,
+              eventType: "LOW_STOCK_ALERT",
+              subject: `Action Required: Low Stock for ${product.name}`,
+              body: `Warning: You are running out of ${product.name} (SKU: ${product.sku}). You only have ${product.quantity} left in stock (Threshold: ${product.lowStockThreshold}). Please reorder immediately to avoid stockouts.`,
+              status: "PENDING_DELIVERY",
+            },
+          });
+        }
+      } else {
+        await tx.lowStockAlert.updateMany({
+          where: { productId: product.id, resolvedAt: null },
+          data: { resolvedAt: new Date() },
+        });
+      }
       // Log the edit
       await tx.auditLog.create({
         data: {
@@ -571,6 +659,11 @@ export async function updateProductAction(
       });
       return product;
     });
+
+    revalidateTag(`inventory-${activeOrgId}`, "default" as any);
+    revalidatePath("/dashboard", "layout");
+
+    await dispatchAlertsIfLowStock(updatedProduct, userId);
 
     return { success: true, product: updatedProduct };
   } catch (error: any) {

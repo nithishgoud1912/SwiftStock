@@ -14,34 +14,41 @@ datasource db {
 enum SubscriptionTier {
   FREE
   PRO
-  ENTERPRISE
 }
 
 model User {
-  id               String                @id @default(cuid())
-  email            String                @unique
-  name             String?
-  avatarUrl        String?
-  subscriptionTier SubscriptionTier      @default(FREE)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  memberships      OrganizationMember[]
-  transactions     StockTransaction[]
-  auditLogs        AuditLog[]
-  adjustmentsReq   InventoryAdjustment[] @relation("RequestedBy")
-  adjustmentsApp   InventoryAdjustment[] @relation("ApprovedBy")
-  notifications    EmailNotification[]
+  id             String                @id @default(cuid())
+  email          String                @unique
+  name           String?
+  avatarUrl      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  memberships    OrganizationMember[]
+  transactions   StockTransaction[]
+  auditLogs      AuditLog[]
+  adjustmentsReq InventoryAdjustment[] @relation("RequestedBy")
+  adjustmentsApp InventoryAdjustment[] @relation("ApprovedBy")
+  notifications  EmailNotification[]
 }
 
 model Organization {
-  id            String               @id @default(cuid())
-  name          String
-  address       String?
-  city          String?
-  contact       String?
-  logoUrl       String?
-  slug          String               @unique
-  currency      String               @default("INR")
+  id               String           @id @default(cuid())
+  name             String
+  address          String?
+  city             String?
+  contact          String?
+  logoUrl          String?
+  slug             String           @unique
+  currency         String           @default("INR")
+  subscriptionTier SubscriptionTier @default(FREE)
+  isSubscribed     Boolean          @default(false)
+
+  // Usage Tracking & Subscriptions
+  razorpaySubId    String?  @unique
+  dailyTxCount     Int      @default(0)
+  dailyUpdateCount Int      @default(0)
+  lastResetDate    DateTime @default(now())
+
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   members       OrganizationMember[]

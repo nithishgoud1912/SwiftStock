@@ -146,6 +146,33 @@ export default function InventoryTable({
     queryFn: () => getOrganization(),
   });
 
+  const isTxLimitReached =
+    organization?.subscriptionTier === "FREE" &&
+    (organization?.dailyTxCount ?? 0) >= 15;
+  const isUpdateLimitReached =
+    organization?.subscriptionTier === "FREE" &&
+    (organization?.dailyUpdateCount ?? 0) >= 10;
+
+  const handleAdjustClick = (itemId: string, type: "IN" | "OUT") => {
+    if (isTxLimitReached) {
+      toast.error(
+        "FREE tier limit reached: Maximum 15 transactions per day. Please upgrade to PRO.",
+      );
+    } else {
+      openAdjustModal(itemId, type);
+    }
+  };
+
+  const handleEditClick = (item: Product) => {
+    if (isUpdateLimitReached) {
+      toast.error(
+        "FREE tier limit reached: Maximum 10 stock updates per day. Please upgrade to PRO.",
+      );
+    } else {
+      openEditProductModal(item);
+    }
+  };
+
   const displayProducts = data?.products || [];
 
   const handleExportCSV = () => {
@@ -509,14 +536,28 @@ export default function InventoryTable({
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="flex justify-end gap-2 items-center">
                       <button
-                        onClick={() => openAdjustModal(item.id, "IN")}
-                        className="inline-flex items-center gap-1 rounded bg-green-50 dark:bg-green-900/20 px-3 py-1 text-sm font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
+                        onClick={() => handleAdjustClick(item.id, "IN")}
+                        className={`inline-flex items-center gap-1 rounded px-3 py-1 text-sm font-medium ${
+                          isTxLimitReached
+                            ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
+                            : "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40"
+                        }`}
+                        title={
+                          isTxLimitReached ? "Upgrade to PRO" : "Add Stock"
+                        }
                       >
                         <Plus size={16} /> Add
                       </button>
                       <button
-                        onClick={() => openAdjustModal(item.id, "OUT")}
-                        className="inline-flex items-center gap-1 rounded bg-red-50 dark:bg-red-900/20 px-3 py-1 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
+                        onClick={() => handleAdjustClick(item.id, "OUT")}
+                        className={`inline-flex items-center gap-1 rounded px-3 py-1 text-sm font-medium ${
+                          isTxLimitReached
+                            ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
+                            : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
+                        }`}
+                        title={
+                          isTxLimitReached ? "Upgrade to PRO" : "Remove Stock"
+                        }
                       >
                         <Minus size={16} /> Remove
                       </button>
@@ -530,9 +571,17 @@ export default function InventoryTable({
                             <QrCode className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => openEditProductModal(item)}
-                            className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 mr-1"
-                            title="Edit Product"
+                            onClick={() => handleEditClick(item)}
+                            className={`rounded-lg p-2 mr-1 ${
+                              isUpdateLimitReached
+                                ? "text-gray-400 cursor-not-allowed"
+                                : "text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                            }`}
+                            title={
+                              isUpdateLimitReached
+                                ? "Upgrade to PRO"
+                                : "Edit Product"
+                            }
                           >
                             <Edit className="h-4 w-4" />
                           </button>

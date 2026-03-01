@@ -222,6 +222,7 @@ export async function updateOrganizationProfile(data: {
   });
 
   revalidatePath("/dashboard/settings/organization");
+  revalidatePath("/dashboard", "layout");
   revalidateTag(`inventory-${organizationId}`, "default" as any);
 
   return organization;
@@ -231,5 +232,10 @@ export async function getOrganization() {
   const organizationId = await getAuthorizedOrgId();
   return prisma.organization.findUnique({
     where: { id: organizationId },
+    include: {
+      _count: {
+        select: { products: true },
+      },
+    },
   });
 }

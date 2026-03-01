@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Tags, Webhook } from "lucide-react";
+import { Building2, Tags, Webhook, CreditCard } from "lucide-react";
 import { useOrganization, useAuth } from "@clerk/nextjs";
 
 export default function SettingsSidebar() {
@@ -21,6 +21,12 @@ export default function SettingsSidebar() {
       name: "Categories",
       href: "/dashboard/settings/categories",
       icon: Tags,
+    },
+    {
+      name: "Billing & Plans",
+      href: "/dashboard/settings/billing",
+      icon: CreditCard,
+      adminOnly: true,
     },
     {
       name: "Developer Webhooks",
