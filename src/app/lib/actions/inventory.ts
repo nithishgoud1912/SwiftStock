@@ -116,7 +116,7 @@ export async function getDashboardData() {
         },
       });
 
-      const plainProducts = products.map((p) => ({
+      const plainProducts = products.map((p: any) => ({
         ...p,
         costPrice: Number(p.costPrice),
         sellingPrice: Number(p.sellingPrice),
@@ -198,7 +198,7 @@ export async function getInventoryProducts(params?: {
       });
 
       // Apply status filter in-memory
-      let filtered = products.map((p) => ({
+      let filtered = products.map((p: any) => ({
         ...p,
         costPrice: Number(p.costPrice),
         sellingPrice: Number(p.sellingPrice),
