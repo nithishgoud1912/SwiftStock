@@ -283,7 +283,7 @@ export async function adjustStock(
     };
   }
 
-  const product = await prisma.$transaction(async (tx) => {
+  const product = await prisma.$transaction(async (tx: any) => {
     const updatedProduct = await tx.product.update({
       where: { id: productId },
       data: {
@@ -399,7 +399,7 @@ export async function createProduct({
   userName: string;
   imageUrl?: string;
 }) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     // 1. Create the Product
     const newProduct = await tx.product.create({
       data: {
@@ -609,7 +609,7 @@ export async function updateProductAction(
     : "Unknown";
 
   try {
-    const updatedProduct = await prisma.$transaction(async (tx) => {
+    const updatedProduct = await prisma.$transaction(async (tx: any) => {
       const product = await tx.product.update({
         where: { id: productId },
         data,
@@ -695,7 +695,7 @@ export async function deleteProductAction(productId: string) {
     ? `${user.firstName} ${user.lastName || ""}`
     : "Unknown";
   const activeOrgId = orgId || userId;
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: any) => {
     // 1. Just delete the actual product! Prisma's Cascade Delete handles the rest automatically!
     const deletedProduct = await tx.product.delete({
       where: { id: productId },
@@ -741,7 +741,7 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
     : "Unknown";
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 1. Fetch the products first so we can log their names/SKUs
       const productsToDelete = await tx.product.findMany({
         where: { id: { in: productIds }, organizationId: activeOrgId },
@@ -767,7 +767,7 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
           entityId: "BULK",
           changes: {
             count: productsToDelete.length,
-            deletedItems: productsToDelete.map((p) => ({
+            deletedItems: productsToDelete.map((p: any) => ({
               id: p.id,
               name: p.name,
               sku: p.sku,
@@ -892,7 +892,7 @@ export async function approveAdjustment(adjustmentId: string) {
   if (orgId && orgRole !== "org:admin")
     throw new Error("Unauthorized. Only admins can approve.");
 
-  const product = await prisma.$transaction(async (tx) => {
+  const product = await prisma.$transaction(async (tx: any) => {
     const adjustment = await tx.inventoryAdjustment.update({
       where: { id: adjustmentId },
       data: {
