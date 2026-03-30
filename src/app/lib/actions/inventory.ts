@@ -123,7 +123,7 @@ export async function getDashboardData() {
       }));
 
       const lowStockItems = plainProducts.filter(
-        (p) => p.quantity <= p.lowStockThreshold,
+        (p: any) => p.quantity <= p.lowStockThreshold,
       );
 
       const org = await prisma.organization.findUnique({
@@ -134,7 +134,7 @@ export async function getDashboardData() {
       return {
         products: plainProducts,
         lowStockCount: lowStockItems.length,
-        totalItems: plainProducts.reduce((acc, p) => acc + p.quantity, 0),
+        totalItems: plainProducts.reduce((acc: any, p: any) => acc + p.quantity, 0),
         currency: org?.currency || "INR",
       };
     },
@@ -205,9 +205,9 @@ export async function getInventoryProducts(params?: {
       }));
 
       if (status === "LOW_STOCK") {
-        filtered = filtered.filter((p) => p.quantity <= p.lowStockThreshold);
+        filtered = filtered.filter((p: any) => p.quantity <= p.lowStockThreshold);
       } else if (status === "IN_STOCK") {
-        filtered = filtered.filter((p) => p.quantity > p.lowStockThreshold);
+        filtered = filtered.filter((p: any) => p.quantity > p.lowStockThreshold);
       }
 
       let nextCursor: string | undefined = undefined;
@@ -368,8 +368,8 @@ export async function lowStockProducts() {
     where: { organizationId },
   });
   return products
-    .filter((p) => p.quantity <= p.lowStockThreshold)
-    .sort((a, b) => a.quantity - b.quantity);
+    .filter((p: any) => p.quantity <= p.lowStockThreshold)
+    .sort((a: any, b: any) => a.quantity - b.quantity);
 }
 
 export async function createProduct({
