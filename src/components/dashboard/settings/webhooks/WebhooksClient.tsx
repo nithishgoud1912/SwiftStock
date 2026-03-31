@@ -7,7 +7,7 @@ import {
   toggleWebhook,
   deleteWebhook,
 } from "@/app/lib/actions/webhooks";
-import { WebhookConfig } from "@prisma/client";
+import type { WebhookConfig } from "@prisma/client";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { Webhook, Trash2, Power, PowerOff, Plus } from "lucide-react";
