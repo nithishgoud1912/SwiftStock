@@ -23,7 +23,7 @@ export default function DeleteProductModal() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (isBulk) {
-        const ids = productsToDelete.map((p) =>
+        const ids = productsToDelete.map((p: any) =>
           typeof p === "string" ? p : (p as Product).id,
         );
         return bulkDeleteProductsAction(ids);

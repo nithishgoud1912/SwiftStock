@@ -247,7 +247,7 @@ export default function TransactionsClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {transactions.map((tx) => (
+            {transactions.map((tx: any) => (
               <tr
                 key={tx.id}
                 className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"

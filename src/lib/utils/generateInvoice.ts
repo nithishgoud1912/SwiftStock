@@ -93,7 +93,7 @@ export const generateInvoice = async (
   const isArray = Array.isArray(transactionData);
   const txs = isArray ? transactionData : [transactionData];
   const tableColumn = ["Date", "Product", "SKU", "Action", "Quantity"];
-  const tableRows = txs.map((tx) => [
+  const tableRows = txs.map((tx: any) => [
     format(new Date(tx.createdAt || new Date()), "MMM d, yyyy"),
     tx.product?.name || "Unknown Product",
     tx.product?.sku || "N/A",

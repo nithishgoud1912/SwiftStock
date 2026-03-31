@@ -82,7 +82,7 @@ export default function ApprovalsClient() {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-          {adjustments.map((adj) => {
+          {adjustments.map((adj: any) => {
             const isAdd = adj.quantityChange > 0;
             return (
               <tr

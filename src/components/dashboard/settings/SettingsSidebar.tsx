@@ -42,7 +42,7 @@ export default function SettingsSidebar() {
         Settings
       </h2>
       <nav className="space-y-1">
-        {links.map((link) => {
+        {links.map((link: any) => {
           if (link.adminOnly && !isAdmin) return null;
 
           const isActive = pathname.startsWith(link.href);

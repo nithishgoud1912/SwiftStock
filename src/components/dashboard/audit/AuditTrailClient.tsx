@@ -36,7 +36,7 @@ const renderChanges = (changes: any) => {
 
     return (
       <div className="flex flex-wrap gap-2">
-        {keys.map((key) => {
+        {keys.map((key: any) => {
           let val = parsed[key];
           if (typeof val === "object") val = JSON.stringify(val);
           else val = String(val);
@@ -203,7 +203,7 @@ export default function AuditTrailClient() {
                   </td>
                 </tr>
               ) : (
-                logs.map((log) => (
+                logs.map((log: any) => (
                   <tr
                     key={log.id}
                     className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"

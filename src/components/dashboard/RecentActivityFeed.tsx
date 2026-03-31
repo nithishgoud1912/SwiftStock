@@ -31,7 +31,7 @@ export default function RecentActivityFeed({
           </div>
         ) : activities && activities.length > 0 ? (
           <div className="space-y-6 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
-            {activities.map((activity) => (
+            {activities.map((activity: any) => (
               <div key={activity.id} className="flex gap-4">
                 <div className="mt-1">
                   {activity.type === "IN" ? (

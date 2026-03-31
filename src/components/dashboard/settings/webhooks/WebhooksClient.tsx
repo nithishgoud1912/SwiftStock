@@ -49,7 +49,7 @@ export default function WebhooksClient({
     const res = await toggleWebhook(id, !currentStatus);
     if (res.success) {
       setWebhooks(
-        webhooks.map((w) =>
+        webhooks.map((w: any) =>
           w.id === id ? { ...w, isActive: !currentStatus } : w,
         ),
       );
@@ -175,7 +175,7 @@ export default function WebhooksClient({
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mt-4">
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {webhooks.map((hook) => (
+            {webhooks.map((hook: any) => (
               <li
                 key={hook.id}
                 className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
