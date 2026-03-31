@@ -126,7 +126,7 @@ export default function ManageBarcodesModal() {
               No barcodes registered.
             </p>
           ) : (
-            barcodes?.map((bc) => (
+            barcodes?.map((bc: any) => (
               <div
                 key={bc.id}
                 className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700"
