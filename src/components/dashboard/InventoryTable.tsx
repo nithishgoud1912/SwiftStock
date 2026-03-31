@@ -70,7 +70,7 @@ export default function InventoryTable({
       "Selling Price",
       "Status",
     ];
-    const data = displayProducts.map((p) => [
+    const data = displayProducts.map((p: any) => [
       p.name,
       p.sku || "N/A",
       p.category?.name || "N/A",
