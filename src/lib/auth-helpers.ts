@@ -1,6 +1,33 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
+async function ensureUserSynced(userId: string) {
+  try {
+    const exists = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!exists) {
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(userId);
+      const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@email.com`;
+      const name = `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() || "User";
+      const avatarUrl = clerkUser.imageUrl || "";
+
+      await prisma.user.create({
+        data: {
+          id: userId,
+          email,
+          name,
+          avatarUrl,
+        },
+      });
+      console.log(`[Auth] Synced missing user ${userId} from Clerk to Prisma.`);
+    }
+  } catch (err) {
+    console.error("[Auth] Failed to sync missing Clerk user to Prisma:", err);
+  }
+}
+
 /**
  * Derives the authorized organization ID from the authenticated session.
  * Uses orgId if the user is in an organization, otherwise falls back to userId
@@ -15,6 +42,8 @@ import { prisma } from "@/lib/prisma";
 export async function getAuthorizedOrgId(): Promise<string> {
   const { userId, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  await ensureUserSynced(userId);
 
   const targetId = orgId || userId;
 
@@ -68,5 +97,8 @@ export async function getAuthorizedOrgId(): Promise<string> {
 export async function getAuthorizedAuth() {
   const { userId, orgId, orgRole } = await auth();
   if (!userId) throw new Error("Unauthorized");
+
+  await ensureUserSynced(userId);
+
   return { userId, orgId, orgRole, activeOrgId: orgId || userId };
 }
