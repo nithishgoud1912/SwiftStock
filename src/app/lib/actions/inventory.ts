@@ -17,6 +17,29 @@ import {
 import crypto from "crypto";
 import { canPerformAction } from "../permissions";
 
+function serializeDecimals<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+
+  if (typeof (obj as any).toNumber === "function") {
+    return (obj as any).toNumber() as any;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(serializeDecimals) as any;
+  }
+
+  if (typeof obj === "object") {
+    if (obj instanceof Date) return obj;
+    const res: any = {};
+    for (const key of Object.keys(obj)) {
+      res[key] = serializeDecimals((obj as any)[key]);
+    }
+    return res;
+  }
+
+  return obj;
+}
+
 // Helper to fire actual HTTP requests to registered webhooks
 async function dispatchWebhooks(organizationId: string, payload: any) {
   try {
@@ -117,11 +140,7 @@ export async function getDashboardData() {
         },
       });
 
-      const plainProducts = products.map((p: any) => ({
-        ...p,
-        costPrice: Number(p.costPrice),
-        sellingPrice: Number(p.sellingPrice),
-      }));
+      const plainProducts = serializeDecimals(products) as any;
 
       const lowStockItems = plainProducts.filter(
         (p: any) => p.quantity <= p.lowStockThreshold,
@@ -199,11 +218,7 @@ export async function getInventoryProducts(params?: {
       });
 
       // Apply status filter in-memory
-      let filtered = products.map((p: any) => ({
-        ...p,
-        costPrice: Number(p.costPrice),
-        sellingPrice: Number(p.sellingPrice),
-      }));
+      let filtered = serializeDecimals(products) as any;
 
       if (status === "LOW_STOCK") {
         filtered = filtered.filter((p: any) => p.quantity <= p.lowStockThreshold);
@@ -245,7 +260,13 @@ export async function adjustStock(
   const { userId, orgRole, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
-  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
   if (!rateLimitOk)
     throw new Error("Too many requests. Please try again later.");
 
@@ -365,7 +386,7 @@ export async function adjustStock(
   await dispatchAlertsIfLowStock(product, userId);
 
   revalidatePath("/dashboard", "layout");
-  return product;
+  return serializeDecimals(product) as any;
 }
 
 /**
@@ -385,7 +406,13 @@ export async function bulkAdjustStock(
   const { userId, orgRole, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
-  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
   if (!rateLimitOk)
     throw new Error("Too many requests. Please try again later.");
 
@@ -531,7 +558,8 @@ export async function lowStockProducts() {
   const products = await prisma.product.findMany({
     where: { organizationId },
   });
-  return products
+  const plainProducts = serializeDecimals(products) as any;
+  return plainProducts
     .filter((p: any) => p.quantity <= p.lowStockThreshold)
     .sort((a: any, b: any) => a.quantity - b.quantity);
 }
@@ -644,9 +672,15 @@ export async function addProductAction(data: {
   const { userId, orgRole } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
-  const { success } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
 
-  if (!success) {
+  if (!rateLimitOk) {
     throw new Error("Too many requests. Please try again later.");
   }
 
@@ -663,17 +697,6 @@ export async function addProductAction(data: {
   const userName = `${fn} ${ln}`.trim() || "Unknown User";
   const userEmail =
     user?.emailAddresses?.[0]?.emailAddress || "unknown@example.com";
-
-  // Upsert user
-  await prisma.user.upsert({
-    where: { email: userEmail },
-    update: { name: userName, id: userId },
-    create: {
-      id: userId,
-      email: userEmail,
-      name: userName,
-    },
-  });
 
   if (!data.categoryId)
     return { success: false, error: "Please select a category." };
@@ -694,7 +717,10 @@ export async function addProductAction(data: {
 
     await dispatchAlertsIfLowStock(product, userId);
 
-    return { success: true, product };
+    return {
+      success: true,
+      product: serializeDecimals(product) as any,
+    };
   } catch (error: any) {
     if (error.code === "P2002") {
       return {
@@ -753,7 +779,13 @@ export async function updateProductAction(
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can edit products." };
 
-  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
   if (!rateLimitOk)
     return {
       success: false,
@@ -837,7 +869,10 @@ export async function updateProductAction(
 
     await dispatchAlertsIfLowStock(updatedProduct, userId);
 
-    return { success: true, product: updatedProduct };
+    return {
+      success: true,
+      product: serializeDecimals(updatedProduct) as any,
+    };
   } catch (error: any) {
     if (error.code === "P2002") {
       return {
@@ -856,7 +891,13 @@ export async function deleteProductAction(productId: string) {
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can delete products." };
 
-  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
   if (!rateLimitOk)
     return {
       success: false,
@@ -907,7 +948,13 @@ export async function bulkDeleteProductsAction(productIds: string[]) {
   if (orgId && orgRole !== "org:admin")
     return { success: false, error: "Only Admins can delete products." };
 
-  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  let rateLimitOk = true;
+  try {
+    const limitResult = await ratelimit.limit(userId);
+    rateLimitOk = limitResult.success;
+  } catch (err) {
+    console.warn("[RateLimit] Upstash connection failed, failing open:", err);
+  }
   if (!rateLimitOk)
     return {
       success: false,

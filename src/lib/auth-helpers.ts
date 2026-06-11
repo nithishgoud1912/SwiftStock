@@ -13,8 +13,13 @@ async function ensureUserSynced(userId: string) {
       const name = `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() || "User";
       const avatarUrl = clerkUser.imageUrl || "";
 
-      await prisma.user.create({
-        data: {
+      await prisma.user.upsert({
+        where: { id: userId },
+        update: {
+          name,
+          avatarUrl,
+        },
+        create: {
           id: userId,
           email,
           name,
