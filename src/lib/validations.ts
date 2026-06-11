@@ -16,6 +16,27 @@ export const adjustStockSchema = z.object({
   }),
 });
 
+/** Schema for a single line item in a bulk transaction */
+export const bulkTransactionLineSchema = z.object({
+  productId: z.string().min(1, "Product ID is required"),
+  quantityChange: z
+    .number()
+    .int("Quantity must be a whole number")
+    .positive("Quantity must be greater than 0"),
+  type: z.enum(["IN", "OUT"], {
+    error: "Type must be 'IN' or 'OUT'",
+  }),
+  notes: z.string().max(500).optional(),
+});
+
+/** Schema for submitting a bulk transaction (multiple line items) */
+export const bulkAdjustStockSchema = z.object({
+  items: z
+    .array(bulkTransactionLineSchema)
+    .min(1, "At least one item is required")
+    .max(50, "Cannot adjust more than 50 items at once"),
+});
+
 /** Schema for adding a new product */
 export const addProductSchema = z.object({
   name: z

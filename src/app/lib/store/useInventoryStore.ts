@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import { Product } from "@/types/inventory";
 
+/** Minimal product snapshot passed into the BulkTransactionModal */
+export interface BulkSeedProduct {
+  id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+}
+
 interface InventoryState {
   isAdjustModalOpen: boolean;
   selectedProductId: string | null;
@@ -29,6 +37,12 @@ interface InventoryState {
   isManageBarcodesModalOpen: boolean;
   openManageBarcodesModal: (product: Product) => void;
   closeManageBarcodesModal: () => void;
+
+  isBulkTransactionModalOpen: boolean;
+  /** Products pre-seeded into the bulk modal (e.g. from inventory selection) */
+  bulkSeedProducts: BulkSeedProduct[];
+  openBulkTransactionModal: (products?: BulkSeedProduct[]) => void;
+  closeBulkTransactionModal: () => void;
 }
 
 export const useInventoryStore = create<InventoryState>((set) => ({
@@ -80,4 +94,11 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       isManageBarcodesModalOpen: false,
       selectedProduct: null,
     }),
+
+  isBulkTransactionModalOpen: false,
+  bulkSeedProducts: [],
+  openBulkTransactionModal: (products = []) =>
+    set({ isBulkTransactionModalOpen: true, bulkSeedProducts: products }),
+  closeBulkTransactionModal: () =>
+    set({ isBulkTransactionModalOpen: false, bulkSeedProducts: [] }),
 }));

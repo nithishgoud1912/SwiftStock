@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getAuthorizedOrgId } from "@/lib/auth-helpers";
+import { canPerformAction } from "../permissions";
 import Papa from "papaparse";
 
 export async function importInventoryCSV(csvText: string) {
@@ -76,8 +77,29 @@ export async function importInventoryCSV(csvText: string) {
         }
       }
 
+      const existingProduct = await prisma.product.findUnique({
+        where: {
+          organizationId_sku: {
+            organizationId,
+            sku,
+          },
+        },
+      });
+
+      if (!existingProduct) {
+        const limitCheck = await canPerformAction(organizationId, "ADD_PRODUCT");
+        if (!limitCheck.allowed) {
+          throw new Error(`Quota limit reached: ${limitCheck.reason}`);
+        }
+      }
+
       await prisma.product.upsert({
-        where: { sku },
+        where: {
+          organizationId_sku: {
+            organizationId,
+            sku,
+          },
+        },
         update: {
           name,
           quantity, // Note: Direct update. In strict ledgers we might require a transaction instead.
@@ -108,6 +130,7 @@ export async function importInventoryCSV(csvText: string) {
 export async function importTransactionsCSV(csvText: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+  const organizationId = await getAuthorizedOrgId();
 
   try {
     const { data: rows, errors } = Papa.parse(csvText, {
@@ -133,7 +156,12 @@ export async function importTransactionsCSV(csvText: string) {
         continue;
 
       const product = await prisma.product.findUnique({
-        where: { sku },
+        where: {
+          organizationId_sku: {
+            organizationId,
+            sku,
+          },
+        },
       });
 
       if (!product) continue; // Skip transactions for unknown SKUs

@@ -4,11 +4,11 @@ import { getAuthorizedOrgId } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "rzp_test_secret_placeholder",
+  key_id: process.env.RAZORPAY_KEY_ID!,
+  key_secret: process.env.RAZORPAY_KEY_SECRET!,
 });
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const orgId = await getAuthorizedOrgId();
 
@@ -30,25 +30,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const { planId } = await req.json();
-
+    const planId = process.env.RAZORPAY_PLAN_ID;
     if (!planId) {
       return NextResponse.json(
-        { error: "Plan ID is required (ex: plan_xyz123)" },
-        { status: 400 },
+        { error: "RAZORPAY_PLAN_ID is not configured on the server." },
+        { status: 500 },
       );
     }
 
-    // 1. Create a Subscription in Razorpay
-    const subscription = await razorpay.subscriptions.create({
-      plan_id: planId, // Plan ID created in Razorpay Dashboard for 99/month
-      customer_notify: 1, // Razorpay will email the customer
-      total_count: 12, // For example, 1 year = 12 months
+    // Create a Razorpay Subscription.
+    // We pass orgId in 'notes' so the webhook can map the payment back to the right org.
+    const subscription = await (razorpay.subscriptions as any).create({
+      plan_id: planId,
+      customer_notify: 1,
+      total_count: 12, // 12-month recurring
+      notes: {
+        orgId, // ← critical: webhook reads this to upgrade the correct org
+      },
     });
 
     return NextResponse.json({
       subscriptionId: subscription.id,
-      entity: "subscription",
+      key: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error: any) {
     console.error("[RAZORPAY] Create Subscription Error:", error);

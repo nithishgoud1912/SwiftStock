@@ -8,6 +8,7 @@ import { resend } from "@/app/lib/resend";
 import { getAuthorizedOrgId } from "@/lib/auth-helpers";
 import {
   adjustStockSchema,
+  bulkAdjustStockSchema,
   addProductSchema,
   updateProductSchema,
   entityIdSchema,
@@ -254,6 +255,11 @@ export async function adjustStock(
   });
   if (!productInfo) throw new Error("Product not found");
 
+  const activeOrgId = await getAuthorizedOrgId();
+  if (productInfo.organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Product does not belong to your organization.");
+  }
+
   const permCheck = await canPerformAction(
     productInfo.organizationId,
     "TRANSACTION",
@@ -360,6 +366,164 @@ export async function adjustStock(
 
   revalidatePath("/dashboard", "layout");
   return product;
+}
+
+/**
+ * Bulk stock adjustment: adjusts multiple products in one atomic Prisma transaction.
+ * Each item gets its own StockTransaction record in the ledger.
+ */
+export async function bulkAdjustStock(
+  items: Array<{
+    productId: string;
+    quantityChange: number;
+    type: "IN" | "OUT";
+    notes?: string;
+  }>,
+) {
+  const validated = bulkAdjustStockSchema.parse({ items });
+
+  const { userId, orgRole, orgId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const { success: rateLimitOk } = await ratelimit.limit(userId);
+  if (!rateLimitOk)
+    throw new Error("Too many requests. Please try again later.");
+
+  // Verify all products belong to the user's org
+  const productIds = validated.items.map((i) => i.productId);
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true, organizationId: true },
+  });
+
+  if (products.length !== productIds.length) {
+    throw new Error("One or more products not found.");
+  }
+
+  const organizationId = products[0].organizationId;
+  const allSameOrg = products.every((p) => p.organizationId === organizationId);
+  if (!allSameOrg) throw new Error("All products must belong to the same organization.");
+
+  const activeOrgId = orgId || userId;
+  if (organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Products do not belong to your organization.");
+  }
+
+  const permCheck = await canPerformAction(organizationId, "TRANSACTION");
+  if (!permCheck.allowed) throw new Error(permCheck.reason);
+
+  const requiresApproval = orgId ? orgRole !== "org:admin" : false;
+
+  if (requiresApproval) {
+    // Fan out individual pending adjustments for each line item
+    await prisma.$transaction(async (tx: any) => {
+      for (const item of validated.items) {
+        await tx.inventoryAdjustment.create({
+          data: {
+            productId: item.productId,
+            requestedById: userId,
+            quantityChange:
+              item.type === "IN" ? item.quantityChange : -item.quantityChange,
+            reason:
+              item.notes ||
+              (item.type === "IN" ? "Bulk stock added" : "Bulk stock removed"),
+            status: "PENDING",
+          },
+        });
+      }
+    });
+
+    revalidatePath("/dashboard", "layout");
+    revalidatePath("/dashboard/approvals");
+    return {
+      status: "PENDING",
+      message: `${validated.items.length} adjustments submitted for admin approval.`,
+    };
+  }
+
+  // Admin / solo user — apply immediately
+  const updatedProducts = await prisma.$transaction(async (tx: any) => {
+    const results = [];
+
+    for (const item of validated.items) {
+      const updated = await tx.product.update({
+        where: { id: item.productId },
+        data: {
+          quantity: {
+            increment: item.type === "IN" ? item.quantityChange : -item.quantityChange,
+          },
+          updatedAt: new Date(),
+        },
+      });
+
+      // Guard: prevent negative stock
+      if (updated.quantity < 0) {
+        throw new Error(
+          `Insufficient stock for "${updated.name}". Cannot remove ${item.quantityChange} units (only ${updated.quantity + item.quantityChange} available).`,
+        );
+      }
+
+      await tx.stockTransaction.create({
+        data: {
+          productId: item.productId,
+          userId,
+          quantity: item.quantityChange,
+          type: item.type,
+          notes:
+            item.notes ||
+            (item.type === "IN" ? "Bulk stock added" : "Bulk stock removed"),
+        },
+      });
+
+      // Low stock alert management per product
+      if (updated.quantity <= updated.lowStockThreshold) {
+        const activeAlert = await tx.lowStockAlert.findFirst({
+          where: { productId: updated.id, resolvedAt: null },
+        });
+        if (!activeAlert) {
+          await tx.lowStockAlert.create({
+            data: { productId: updated.id, notified: true },
+          });
+          await tx.emailNotification.create({
+            data: {
+              userId,
+              organizationId: updated.organizationId,
+              eventType: "LOW_STOCK_ALERT",
+              subject: `Action Required: Low Stock for ${updated.name}`,
+              body: `Warning: You are running out of ${updated.name} (SKU: ${updated.sku}). You only have ${updated.quantity} left in stock (Threshold: ${updated.lowStockThreshold}).`,
+              status: "PENDING_DELIVERY",
+            },
+          });
+        }
+      } else {
+        await tx.lowStockAlert.updateMany({
+          where: { productId: updated.id, resolvedAt: null },
+          data: { resolvedAt: new Date() },
+        });
+      }
+
+      results.push(updated);
+    }
+
+    // Increment daily tx count by the number of items
+    await tx.organization.update({
+      where: { id: organizationId },
+      data: { dailyTxCount: { increment: validated.items.length } },
+    });
+
+    return results;
+  });
+
+  // Invalidate caches
+  revalidateTag(`inventory-${organizationId}`, "default");
+  revalidatePath("/dashboard", "layout");
+
+  // Dispatch low-stock external alerts outside the transaction
+  for (const product of updatedProducts) {
+    await dispatchAlertsIfLowStock(product, userId);
+  }
+
+  return { status: "OK", updatedCount: updatedProducts.length };
 }
 
 export async function lowStockProducts() {
@@ -610,6 +774,14 @@ export async function updateProductAction(
 
   try {
     const updatedProduct = await prisma.$transaction(async (tx: any) => {
+      const existingProduct = await tx.product.findUnique({
+        where: { id: productId },
+        select: { organizationId: true },
+      });
+      if (!existingProduct || existingProduct.organizationId !== activeOrgId) {
+        throw new Error("Unauthorized: Product does not belong to your organization.");
+      }
+
       const product = await tx.product.update({
         where: { id: productId },
         data,
@@ -696,6 +868,14 @@ export async function deleteProductAction(productId: string) {
     : "Unknown";
   const activeOrgId = orgId || userId;
   const result = await prisma.$transaction(async (tx: any) => {
+    const existingProduct = await tx.product.findUnique({
+      where: { id: productId },
+      select: { organizationId: true },
+    });
+    if (!existingProduct || existingProduct.organizationId !== activeOrgId) {
+      throw new Error("Unauthorized: Product does not belong to your organization.");
+    }
+
     // 1. Just delete the actual product! Prisma's Cascade Delete handles the rest automatically!
     const deletedProduct = await tx.product.delete({
       where: { id: productId },
@@ -892,7 +1072,17 @@ export async function approveAdjustment(adjustmentId: string) {
   if (orgId && orgRole !== "org:admin")
     throw new Error("Unauthorized. Only admins can approve.");
 
+  const activeOrgId = orgId || userId;
+
   const product = await prisma.$transaction(async (tx: any) => {
+    const existingAdjustment = await tx.inventoryAdjustment.findUnique({
+      where: { id: adjustmentId },
+      include: { product: { select: { organizationId: true } } },
+    });
+    if (!existingAdjustment || existingAdjustment.product.organizationId !== activeOrgId) {
+      throw new Error("Unauthorized: Adjustment does not belong to your organization.");
+    }
+
     const adjustment = await tx.inventoryAdjustment.update({
       where: { id: adjustmentId },
       data: {
@@ -972,6 +1162,16 @@ export async function rejectAdjustment(adjustmentId: string) {
   if (!userId) throw new Error("Unauthorized");
   if (orgId && orgRole !== "org:admin")
     throw new Error("Unauthorized. Only admins can reject.");
+
+  const activeOrgId = orgId || userId;
+
+  const existingAdjustment = await prisma.inventoryAdjustment.findUnique({
+    where: { id: adjustmentId },
+    include: { product: { select: { organizationId: true } } },
+  });
+  if (!existingAdjustment || existingAdjustment.product.organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Adjustment does not belong to your organization.");
+  }
 
   await prisma.inventoryAdjustment.update({
     where: { id: adjustmentId },

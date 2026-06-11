@@ -70,8 +70,10 @@ export async function toggleWebhook(id: string, isActive: boolean) {
   if (orgRole && orgRole !== "org:admin")
     throw new Error("Only admins can modify webhooks.");
 
+  const organizationId = await getAuthorizedOrgId();
+
   await prisma.webhookConfig.update({
-    where: { id },
+    where: { id, organizationId },
     data: { isActive },
   });
 
@@ -86,8 +88,10 @@ export async function deleteWebhook(id: string) {
   if (orgRole && orgRole !== "org:admin")
     throw new Error("Only admins can delete webhooks.");
 
+  const organizationId = await getAuthorizedOrgId();
+
   await prisma.webhookConfig.delete({
-    where: { id },
+    where: { id, organizationId },
   });
 
   revalidatePath("/dashboard/settings/webhooks");

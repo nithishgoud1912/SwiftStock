@@ -94,7 +94,7 @@ model Product {
   imageUrl          String?
   costPrice         Decimal               @default(0)
   sellingPrice      Decimal               @default(0)
-  sku               String                @unique
+  sku               String
   description       String?
   quantity          Int                   @default(0)
   lowStockThreshold Int                   @default(10)
@@ -109,6 +109,7 @@ model Product {
 
   @@index([organizationId])
   @@index([categoryId])
+  @@unique([organizationId, sku])
 }
 
 // --- Transactions & Audit ---
@@ -178,12 +179,13 @@ model Barcode {
   id        String   @id @default(cuid())
   productId String
   type      String // "EAN", "UPC", "QR"
-  code      String   @unique
+  code      String
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+  @@unique([productId, code])
 }
 
 model WebhookConfig {

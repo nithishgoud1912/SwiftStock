@@ -13,6 +13,7 @@ import {
   Upload,
   Search,
   Package,
+  ShoppingCart,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { importInventoryCSV } from "@/app/lib/actions/import";
@@ -21,6 +22,7 @@ import AdjustStockModal from "./AdjustStockModal";
 import EditProductModal from "./EditProductModal";
 import DeleteProductModal from "./DeleteProductModal";
 import ManageBarcodesModal from "./ManageBarcodesModal";
+import BulkTransactionModal from "./BulkTransactionModal";
 import { useQuery } from "@tanstack/react-query";
 import { getInventoryProducts } from "@/app/lib/actions/inventory";
 import { useOrganization, useAuth } from "@clerk/nextjs";
@@ -40,6 +42,7 @@ export default function InventoryTable({
     openEditProductModal,
     openDeleteProductModal,
     openManageBarcodesModal,
+    openBulkTransactionModal,
   } = useInventoryStore();
 
   const { membership } = useOrganization();
@@ -161,6 +164,25 @@ export default function InventoryTable({
     } else {
       openAdjustModal(itemId, type);
     }
+  };
+
+  const handleBulkTransactionFromSelection = () => {
+    if (isTxLimitReached) {
+      toast.error(
+        "FREE tier limit reached: Maximum 15 transactions per day. Please upgrade to PRO.",
+      );
+      return;
+    }
+    // Build seed products from the currently selected rows
+    const seedProducts = displayProducts
+      .filter((p: Product) => selectedProductIds.has(p.id))
+      .map((p: Product) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        quantity: p.quantity,
+      }));
+    openBulkTransactionModal(seedProducts);
   };
 
   const handleEditClick = (item: Product) => {
@@ -323,15 +345,24 @@ export default function InventoryTable({
         {/* Action Buttons */}
         <div className="flex gap-2">
           {isAdmin && selectedProductIds.size > 0 && (
-            <button
-              onClick={() =>
-                openDeleteProductModal(Array.from(selectedProductIds))
-              }
-              className="flex items-center gap-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 border border-transparent hover:bg-red-200 dark:hover:bg-red-900/50 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm shrink-0"
-            >
-              <Trash2 size={16} />
-              Delete ({selectedProductIds.size})
-            </button>
+            <>
+              <button
+                onClick={handleBulkTransactionFromSelection}
+                className="flex items-center gap-2 bg-[#6c47ff] hover:bg-[#5835e0] text-white border border-transparent px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm shadow-[#6c47ff]/30 shrink-0"
+              >
+                <ShoppingCart size={16} />
+                Stock Transaction ({selectedProductIds.size})
+              </button>
+              <button
+                onClick={() =>
+                  openDeleteProductModal(Array.from(selectedProductIds))
+                }
+                className="flex items-center gap-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 border border-transparent hover:bg-red-200 dark:hover:bg-red-900/50 px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm shrink-0"
+              >
+                <Trash2 size={16} />
+                Delete ({selectedProductIds.size})
+              </button>
+            </>
           )}
 
           {/* Hidden File Input */}
@@ -342,6 +373,15 @@ export default function InventoryTable({
             className="hidden"
             onChange={handleImportCSV}
           />
+
+          <button
+            onClick={() => openBulkTransactionModal()}
+            className="flex items-center gap-2 bg-[#6c47ff] hover:bg-[#5835e0] text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-sm shadow-[#6c47ff]/30 shrink-0"
+            title="Create a transaction for multiple products at once"
+          >
+            <ShoppingCart size={16} />
+            New Transaction
+          </button>
 
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -608,6 +648,7 @@ export default function InventoryTable({
       <EditProductModal />
       <DeleteProductModal />
       <ManageBarcodesModal />
+      <BulkTransactionModal />
     </>
   );
 }

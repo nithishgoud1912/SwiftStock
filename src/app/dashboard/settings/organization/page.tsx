@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { OrganizationProfile } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import MembersClient from "@/components/dashboard/settings/MembersClient";
 import { prisma } from "@/lib/prisma";
 import OrganizationDetailsForm from "@/components/dashboard/settings/OrganizationDetailsForm";
 
@@ -43,10 +42,6 @@ export default async function OrganizationSettingsPage() {
 
       <div className="px-6 pb-12 w-full max-w-6xl mt-4">
         <OrganizationDetailsForm organization={organization} />
-      </div>
-
-      <div className="px-6 pb-12">
-        <MembersClient />
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import OnboardingTutorial from "@/components/landing/OnboardingTutorial";
 
 export default async function Home() {
   const { userId } = await auth();
@@ -61,6 +62,9 @@ export default async function Home() {
             </Link>
           </div>
         </section>
+
+        {/* Onboarding Tutorial for Newcomers */}
+        {!userId && <OnboardingTutorial />}
 
         {/* What is SwiftStock Section */}
         <section

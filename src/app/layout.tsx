@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HeaderAuth } from "@/components/header-auth";
 import { Toaster } from "react-hot-toast";
+import Script from "next/script";
 import "./globals.css";
 import Link from "next/link";
 import { QueryProvider } from "@/components/providers/QueryProvider";
@@ -33,8 +34,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Razorpay Checkout SDK — loaded lazily, available as window.Razorpay */}
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+        />
         <ClerkProvider>
           <ThemeProvider
             attribute="class"

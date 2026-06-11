@@ -4,8 +4,17 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
 export async function getBarcodes(productId: string) {
-  const { userId } = await auth();
+  const { userId, orgId } = await auth();
   if (!userId) throw new Error("Unauthorized");
+  const activeOrgId = orgId || userId;
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { organizationId: true },
+  });
+  if (!product || product.organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Product does not belong to your organization.");
+  }
 
   return prisma.barcode.findMany({
     where: { productId },
@@ -22,6 +31,15 @@ export async function addBarcode(
   if (!userId) throw new Error("Unauthorized");
   if (orgId && orgRole !== "org:admin")
     throw new Error("Only admins can manage barcodes.");
+
+  const activeOrgId = orgId || userId;
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { organizationId: true },
+  });
+  if (!product || product.organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Product does not belong to your organization.");
+  }
 
   try {
     const barcode = await prisma.barcode.create({
@@ -49,6 +67,15 @@ export async function deleteBarcode(id: string) {
   if (!userId) throw new Error("Unauthorized");
   if (orgId && orgRole !== "org:admin")
     throw new Error("Only admins can manage barcodes.");
+
+  const activeOrgId = orgId || userId;
+  const barcode = await prisma.barcode.findUnique({
+    where: { id },
+    include: { product: { select: { organizationId: true } } },
+  });
+  if (!barcode || barcode.product.organizationId !== activeOrgId) {
+    throw new Error("Unauthorized: Barcode does not belong to your organization.");
+  }
 
   await prisma.barcode.delete({ where: { id } });
   return { success: true };
